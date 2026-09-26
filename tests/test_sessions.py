@@ -2,6 +2,7 @@
 
 import json
 import os
+import select
 import subprocess
 import sys
 import tempfile
@@ -9,6 +10,24 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "plugin" / "omo_sessions.py"
+EXTENSION = SCRIPT.with_name("omo-status.ts")
+
+ADAPTER = """
+import { createInterface } from "node:readline";
+const handlers = new Map();
+const ctx = { sessionManager: {
+  getSessionId: () => process.env.TEST_SESSION_ID,
+  getSessionFile: () => process.env.TEST_SESSION_FILE,
+}};
+const extension = await import(process.env.TEST_EXTENSION);
+extension.default({ on: (name, handler) => handlers.set(name, handler) });
+for await (const line of createInterface({ input: process.stdin })) {
+  const event = JSON.parse(line);
+  const handler = handlers.get(event.type);
+  if (handler) await handler(event, ctx);
+  process.stdout.write("DONE\\n");
+}
+"""
 
 
 class SessionCollectorTests(unittest.TestCase):
@@ -23,20 +42,47 @@ class SessionCollectorTests(unittest.TestCase):
         self.folder = self.agent / "sessions" / "--project--"
         self.folder.mkdir(parents=True)
         self.path = self.folder / "2026-09-26T00-00-00Z_abc-123.jsonl"
+        self.runtime = root / "runtime"
+        self.runtime.mkdir(mode=0o700)
 
     def cli(self, *args):
         return subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "--agent-dir", str(self.agent),
              "--task-dir", str(self.tasks), *args],
             capture_output=True, text=True, check=False, timeout=8,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+                 "XDG_RUNTIME_DIR": str(self.runtime)},
         )
 
-    def write_session(self, *entries):
-        header = {"type": "session", "version": 3, "id": "abc-123",
+    def write_session(self, *entries, sid="abc-123", path=None):
+        path = path or self.path
+        header = {"type": "session", "version": 3, "id": sid,
                   "cwd": str(self.cwd), "timestamp": "2026-09-26T00:00:00Z"}
-        self.path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n"
-                                     for row in (header, *entries)), encoding="utf-8")
+        path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n"
+                                for row in (header, *entries)), encoding="utf-8")
+
+    def adapter(self, sid="abc-123", path=None, lazy_file=False):
+        process = subprocess.Popen(
+            ["bun", "-e", ADAPTER], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True,
+            env={**os.environ, "XDG_RUNTIME_DIR": str(self.runtime),
+                 "TEST_SESSION_ID": sid,
+                 "TEST_SESSION_FILE": "" if lazy_file else str(path or self.path),
+                 "TEST_EXTENSION": str(EXTENSION)},
+        )
+        def cleanup():
+            if process.poll() is None:
+                process.terminate()
+            process.communicate(timeout=4)
+        self.addCleanup(cleanup)
+        return process
+
+    def emit(self, process, event):
+        process.stdin.write(json.dumps({"type": event}) + "\n")
+        process.stdin.flush()
+        ready, _, _ = select.select([process.stdout], [], [], 4)
+        self.assertTrue(ready, f"adapter failed: {process.poll()}")
+        self.assertEqual(process.stdout.readline(), "DONE\n")
 
     def listing(self):
         result = self.cli("list")
@@ -140,6 +186,73 @@ class SessionCollectorTests(unittest.TestCase):
         with self.path.open("ab") as stream:
             stream.write(b"x" * (16 * 1024 * 1024 + 1))
         self.assertNotIn("abc-123", [s["id"] for s in self.listing()["sessions"]])
+
+    def test_live_waiting_idle_and_shutdown_follow_exact_events(self):
+        self.write_session()
+        process = self.adapter()
+        self.emit(process, "session_start")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["status"], "idle")
+        self.emit(process, "agent_start")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["working"], True)
+        self.emit(process, "ui_prompt_start")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"],
+                         {"kind": "live", "working": False, "status": "waiting",
+                          "evidence": "senpi extension and verified process"})
+        self.emit(process, "ui_prompt_end")
+        self.emit(process, "agent_end")
+        self.assertTrue(self.listing()["sessions"][0]["runtime"]["working"])
+        self.emit(process, "agent_settled")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["kind"], "idle")
+        self.emit(process, "ui_prompt_start")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["status"], "waiting")
+        self.emit(process, "ui_prompt_end")
+        self.emit(process, "session_shutdown")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["kind"], "ended")
+
+    def test_fresh_session_without_allocated_file_tracks_first_turn(self):
+        self.write_session()
+        process = self.adapter(lazy_file=True)
+        self.emit(process, "session_start")
+        self.emit(process, "agent_start")
+        self.assertTrue(self.listing()["sessions"][0]["runtime"]["working"])
+
+    def test_exited_process_and_reused_pid_never_remain_working(self):
+        self.write_session()
+        process = self.adapter()
+        self.emit(process, "session_start")
+        self.emit(process, "agent_start")
+        state = self.runtime / "omo-session-state" / "abc-123.json"
+        data = json.loads(state.read_text())
+        data["processStart"] = str(int(data["processStart"]) + 1)
+        state.write_text(json.dumps(data))
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["kind"], "ended")
+        state.write_text(json.dumps({**data, "processStart": str(int(data["processStart"]) - 1)}))
+        self.assertTrue(self.listing()["sessions"][0]["runtime"]["working"])
+        process.terminate()
+        process.wait(timeout=4)
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["kind"], "ended")
+
+    def test_two_sessions_are_independent_and_untrusted_state_is_unknown(self):
+        other = self.folder / "2026-09-26T01-00-00Z_def-456.jsonl"
+        self.write_session()
+        self.write_session(sid="def-456", path=other)
+        first = self.adapter()
+        second = self.adapter("def-456", other)
+        self.emit(first, "session_start")
+        self.emit(second, "session_start")
+        self.emit(first, "agent_start")
+        by_id = {item["id"]: item["runtime"] for item in self.listing()["sessions"]}
+        self.assertTrue(by_id["abc-123"]["working"])
+        self.assertEqual(by_id["def-456"]["kind"], "idle")
+        state = self.runtime / "omo-session-state" / "abc-123.json"
+        state.chmod(0o644)
+        self.assertEqual({s["id"]: s["runtime"] for s in self.listing()["sessions"]}
+                         ["abc-123"]["kind"], "unknown")
+        state.chmod(0o600)
+        state.unlink()
+        state.symlink_to(self.runtime / "omo-session-state" / "def-456.json")
+        self.assertEqual({s["id"]: s["runtime"] for s in self.listing()["sessions"]}
+                         ["abc-123"]["kind"], "unknown")
 
 
 if __name__ == "__main__":

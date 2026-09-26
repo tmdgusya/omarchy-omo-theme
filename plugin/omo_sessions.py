@@ -76,7 +76,7 @@ def safe_file(path, root):
         return False
 
 
-def read_bytes(path, root, budget, limit):
+def read_bytes(path, root, budget, limit, owner=None):
     if not safe_file(path, root):
         return None
     try:
@@ -92,7 +92,9 @@ def read_bytes(path, root, budget, limit):
                          dir_fd=directory)
             with os.fdopen(fd, "rb") as stream:
                 before = os.fstat(stream.fileno())
-                if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+                if (not stat.S_ISREG(before.st_mode) or before.st_size > limit
+                        or (owner is not None and
+                            (before.st_uid != owner or before.st_mode & 0o077))):
                     budget.limited |= before.st_size > limit
                     return None
                 if not budget.check(before.st_size):
@@ -146,6 +148,56 @@ def count_todos(data):
     return {"completed": counts["completed"], "pending": counts["pending"],
             "inProgress": counts["in_progress"], "abandoned": counts["abandoned"],
             "total": len(tasks)}
+
+
+def runtime_state(sid, budget):
+    unknown = {"kind": "unknown", "working": False, "status": "unknown",
+               "evidence": "no verified session process"}
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime or not os.path.isabs(runtime):
+        return unknown
+    root = Path(runtime) / "omo-session-state"
+    try:
+        uid = os.getuid()
+        for directory in (Path(runtime), root):
+            info = directory.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid
+                    or info.st_mode & 0o077):
+                return unknown
+        raw = read_bytes(root / (sid + ".json"), root, budget, 1024, owner=uid)
+        if raw is None:
+            return unknown
+        data = record(json.loads(raw))
+        pid = data.get("pid")
+        start = data.get("processStart")
+        state = data.get("state")
+        if (data.get("version") != 1 or data.get("sessionId") != sid
+                or type(pid) is not int or pid < 1 or not isinstance(start, str)
+                or not start.isascii() or not start.isdecimal()
+                or state not in ("live", "idle", "ended")
+                or type(data.get("waiting")) is not bool):
+            return unknown
+        if state == "ended":
+            return {"kind": "ended", "working": False, "status": "ended",
+                    "evidence": "session_shutdown"}
+        proc = Path("/proc") / str(pid)
+        if proc.stat().st_uid != uid:
+            return unknown
+        fields = (proc / "stat").read_text().rsplit(") ", 1)[1].split()
+        alive = fields[0] not in ("Z", "X") and fields[19] == start
+        if not alive:
+            return {"kind": "ended", "working": False, "status": "ended",
+                    "evidence": "session process exited"}
+        waiting = data["waiting"]
+        return {"kind": state, "working": state == "live" and not waiting,
+                "status": "waiting" if waiting else ("working" if state == "live" else "idle"),
+                "evidence": "senpi extension and verified process"}
+    except FileNotFoundError:
+        # The state file was verified, but its process disappeared.
+        return ({"kind": "ended", "working": False, "status": "ended",
+                 "evidence": "session process exited"} if "data" in locals() else unknown)
+    except (OSError, ValueError, IndexError, UnicodeDecodeError, RecursionError):
+        return unknown
 
 
 def session(path, root, agent_dir, budget):
@@ -235,7 +287,7 @@ def session(path, root, agent_dir, budget):
                "total": len(criteria), "status": text(selected.get("status"), 32)}
     return {"id": sid, "cwdLabel": text(Path(header["cwd"]).name or "/", 48),
             "title": title or "Untitled", "activityAt": activity,
-            "runtime": {"kind": "unknown", "evidence": "no verified session process"},
+            "runtime": runtime_state(sid, budget),
             "todos": todos, "ulw": ulw, "goal": goal,
             "runningDelegatedTasks": 0, "sessionPath": str(path), "cwd": header["cwd"]}
 
