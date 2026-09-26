@@ -92,6 +92,12 @@ class SessionCollectorTests(unittest.TestCase):
     def test_empty_roots_produce_stable_schema(self):
         self.assertEqual(self.listing(), {"schemaVersion": 1, "sessions": [], "error": None})
 
+    def test_session_without_todo_state_does_not_invent_progress(self):
+        self.write_session()
+        item = self.listing()["sessions"][0]
+        self.assertIsNone(item["todos"])
+        self.assertFalse(item["partial"])
+
     def test_branch_counts_and_explicit_goal_are_independent_of_runtime(self):
         self.write_session(
             {"type": "message", "id": "a", "parentId": None, "timestamp": "2026-09-26T01:00:00Z",
@@ -111,7 +117,7 @@ class SessionCollectorTests(unittest.TestCase):
         ulw_dir.mkdir(parents=True)
         (ulw_dir / "goals.json").write_text(json.dumps({
             "activeGoalId": "g", "goals": [{"id": "g", "status": "in_progress",
-                "successCriteria": [{"status": "passed"}, {"status": "pending"}]}]}))
+                "successCriteria": [{"status": "pass"}, {"status": "pending"}]}]}))
         task_dir = self.tasks / "tasks"
         task_dir.mkdir(parents=True)
         (task_dir / "st_123.json").write_text(json.dumps({
@@ -185,7 +191,67 @@ class SessionCollectorTests(unittest.TestCase):
         self.assertEqual(len(self.listing()["sessions"]), 12)
         with self.path.open("ab") as stream:
             stream.write(b"x" * (16 * 1024 * 1024 + 1))
-        self.assertNotIn("abc-123", [s["id"] for s in self.listing()["sessions"]])
+        self.assertIn("abc-123", [s["id"] for s in self.listing()["sessions"]])
+
+    def test_large_named_session_preserves_exact_branch_todos(self):
+        self.write_session(
+            {"type": "message", "id": "first", "parentId": None,
+             "message": {"role": "user", "content": "<ultrawork-mode>scaffolding"}},
+            {"type": "session_info", "id": "named", "parentId": "first",
+             "name": "Current work"},
+        )
+        parent = "named"
+        with self.path.open("a") as stream:
+            for index in range(70):
+                eid = f"body-{index}"
+                stream.write(json.dumps({"type": "message", "id": eid, "parentId": parent,
+                    "message": {"role": "toolResult", "toolName": "read",
+                                "content": "x" * (260 * 1024)}}) + "\n")
+                parent = eid
+            stream.write(json.dumps({"type": "message", "id": "huge", "parentId": parent,
+                "message": {"role": "toolResult", "toolName": "read",
+                            "content": "x" * (2 * 1024 * 1024)}}) + "\n")
+            stream.write(json.dumps({"type": "custom", "id": "branch", "parentId": "huge",
+                "customType": "senpi.todo-state",
+                "data": {"schema": "v2", "phases": [{"name": "work", "tasks": [
+                    {"content": str(i), "status": "completed" if i < 6 else
+                     "in_progress" if i == 6 else "pending"} for i in range(13)]}]}}) + "\n")
+            stream.write(json.dumps({"type": "custom", "id": "fork", "parentId": "named",
+                "customType": "senpi.todo-state",
+                "data": {"todos": [{"content": "wrong", "status": "completed"}]}}) + "\n")
+            stream.write(json.dumps({"type": "message", "id": "leaf", "parentId": "branch",
+                "message": {"role": "assistant"}}) + "\n")
+        self.assertGreater(self.path.stat().st_size, 16 * 1024 * 1024)
+        item = self.listing()["sessions"][0]
+        self.assertEqual(item["title"], "Current work")
+        self.assertEqual(item["todos"], {"completed": 6, "pending": 6,
+                         "inProgress": 1, "abandoned": 0, "total": 13})
+        self.assertFalse(item["partial"])
+        self.assertNotIn("x" * 100, json.dumps(item))
+
+    def test_scan_limit_retains_header_without_inventing_todos(self):
+        self.write_session({"type": "session_info", "id": "named", "parentId": None,
+                            "name": "Bounded session"})
+        with self.path.open("a") as stream:
+            for index in range(70):
+                stream.write(json.dumps({"type": "message", "id": f"row-{index}",
+                    "parentId": "named", "message": {"role": "toolResult",
+                    "toolName": "read", "content": "x" * (1024 * 1024)}}) + "\n")
+        item = self.listing()["sessions"][0]
+        self.assertEqual(item["title"], "Bounded session")
+        self.assertIsNone(item["todos"])
+        self.assertTrue(item["partial"])
+
+    def test_task_registry_budget_preserves_collected_sessions(self):
+        self.write_session()
+        directory = self.tasks / "tasks"
+        directory.mkdir(parents=True)
+        for index in range(220):
+            (directory / f"st_{index:08x}.json").write_text(json.dumps({
+                "parent_session_id": "abc-123", "status": "running"}))
+        result = self.listing()
+        self.assertEqual(result["sessions"][0]["id"], "abc-123")
+        self.assertEqual(result["error"], "scan limit reached")
 
     def test_live_waiting_idle_and_shutdown_follow_exact_events(self):
         self.write_session()

@@ -16,9 +16,10 @@ CANDIDATE_LIMIT = 128
 PATH_LIMIT = 2048
 FILE_LIMIT = 192
 BYTE_LIMIT = 96 * 1024 * 1024
-SESSION_BYTES = 16 * 1024 * 1024
+SESSION_BYTES = 64 * 1024 * 1024
 JSON_BYTES = 256 * 1024
-LINE_BYTES = 1024 * 1024
+LINE_BYTES = 12 * 1024 * 1024
+ENTRY_LIMIT = 30000
 OUTPUT_BYTES = 128 * 1024
 SECONDS = 4
 ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,100}$")
@@ -201,75 +202,115 @@ def runtime_state(sid, budget):
 
 
 def session(path, root, agent_dir, budget):
-    raw = read_bytes(path, root, budget, SESSION_BYTES)
-    if not raw or not raw.endswith(b"\n"):
-        if raw:
-            raw = raw[:raw.rfind(b"\n") + 1]
-        else:
-            return None
+    if not safe_file(path, root):
+        return None
     entries = {}
     leaf = None
     header = None
     title = ""
+    named = False
     activity = ""
-    for line in raw.splitlines():
-        if len(line) > LINE_BYTES:
-            budget.limited = True
-            continue
-        try:
-            entry = record(json.loads(line))
-        except (ValueError, UnicodeDecodeError, RecursionError):
-            continue
-        if header is None:
-            if (entry.get("type") != "session" or entry.get("version") != 3
-                    or not ID_RE.fullmatch(str(entry.get("id", "")))
-                    or not path.name.endswith("_" + entry["id"] + ".jsonl")
-                    or not isinstance(entry.get("cwd"), str)
-                    or not os.path.isabs(entry["cwd"])):
-                return None
-            header = entry
-            activity = text(entry.get("timestamp"), 40)
-            continue
-        eid = entry.get("id")
-        if not isinstance(eid, str) or not eid or len(eid) > 120:
-            continue
-        entries[eid] = entry
-        leaf = eid
-        if entry.get("type") == "session_info":
-            title = text(entry.get("name")) or title
-        if entry.get("type") == "message":
-            message = record(entry.get("message"))
-            if message.get("role") in ("user", "assistant"):
-                activity = text(entry.get("timestamp"), 40) or activity
-            if not title and message.get("role") == "user":
-                content = message.get("content")
-                if isinstance(content, str):
-                    title = text(content)
-                elif isinstance(content, list):
-                    title = next((text(record(part).get("text")) for part in content
-                                  if text(record(part).get("text"))), "")
+    partial = False
+    try:
+        with ExitStack() as stack:
+            directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            stack.callback(os.close, directory)
+            parts = path.relative_to(root).parts
+            for part in parts[:-1]:
+                directory = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=directory)
+                stack.callback(os.close, directory)
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=directory)
+            with os.fdopen(fd, "rb") as stream:
+                before = os.fstat(stream.fileno())
+                if not stat.S_ISREG(before.st_mode) or not budget.check():
+                    return None
+                consumed = 0
+                while consumed < SESSION_BYTES and len(entries) < ENTRY_LIMIT:
+                    if time.monotonic() >= budget.deadline or budget.bytes >= BYTE_LIMIT:
+                        partial = True
+                        budget.limited = True
+                        break
+                    length = min(LINE_BYTES + 1, SESSION_BYTES - consumed,
+                                 BYTE_LIMIT - budget.bytes)
+                    line = stream.readline(length)
+                    if not line:
+                        break
+                    consumed += len(line)
+                    budget.bytes += len(line)
+                    if not line.endswith(b"\n"):
+                        if stream.tell() < before.st_size and (len(line) >= LINE_BYTES
+                                or consumed >= SESSION_BYTES or budget.bytes >= BYTE_LIMIT):
+                            partial = True
+                            budget.limited = True
+                        break
+                    try:
+                        entry = record(json.loads(line))
+                    except (ValueError, UnicodeDecodeError, RecursionError):
+                        continue
+                    if header is None:
+                        if (entry.get("type") != "session" or entry.get("version") != 3
+                                or not ID_RE.fullmatch(str(entry.get("id", "")))
+                                or not path.name.endswith("_" + entry["id"] + ".jsonl")
+                                or not isinstance(entry.get("cwd"), str)
+                                or not os.path.isabs(entry["cwd"])):
+                            return None
+                        header = entry
+                        activity = text(entry.get("timestamp"), 40)
+                        continue
+                    eid = entry.get("id")
+                    if not isinstance(eid, str) or not eid or len(eid) > 120:
+                        continue
+                    parent = entry.get("parentId")
+                    payload = None
+                    if entry.get("type") == "custom" and entry.get("customType") == "senpi.todo-state":
+                        payload = record(entry.get("data"))
+                    elif entry.get("type") == "message":
+                        message = record(entry.get("message"))
+                        if message.get("role") in ("user", "assistant"):
+                            activity = text(entry.get("timestamp"), 40) or activity
+                        if not named and not title and message.get("role") == "user":
+                            content = message.get("content")
+                            if isinstance(content, str):
+                                title = text(content)
+                            elif isinstance(content, list):
+                                title = next((text(record(part).get("text")) for part in content
+                                              if text(record(part).get("text"))), "")
+                        if message.get("role") == "toolResult" and message.get("toolName") in ("todo", "todowrite"):
+                            payload = record(message.get("details"))
+                    if entry.get("type") == "session_info":
+                        name = text(entry.get("name"))
+                        if name:
+                            title = name
+                            named = True
+                    entries[eid] = (parent, count_todos(payload) if payload is not None else None)
+                    leaf = eid
+                if consumed >= SESSION_BYTES or len(entries) >= ENTRY_LIMIT:
+                    if stream.tell() < before.st_size:
+                        partial = True
+                        budget.limited = True
+                after = os.fstat(stream.fileno())
+                if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+                    partial = True
+    except (OSError, ValueError):
+        return None
     if header is None:
         return None
     lineage = set()
     while leaf in entries and leaf not in lineage:
         lineage.add(leaf)
-        parent = entries[leaf].get("parentId")
+        parent = entries[leaf][0]
         leaf = parent if isinstance(parent, str) else None
-    todos = {"completed": 0, "pending": 0, "inProgress": 0, "abandoned": 0, "total": 0}
-    for entry in entries.values():
-        if entry.get("id") not in lineage:
-            continue
-        payload = None
-        if entry.get("type") == "custom" and entry.get("customType") == "senpi.todo-state":
-            payload = record(entry.get("data"))
-        elif entry.get("type") == "message":
-            msg = record(entry.get("message"))
-            if msg.get("role") == "toolResult" and msg.get("toolName") in ("todo", "todowrite"):
-                payload = record(msg.get("details"))
-        if payload is not None:
-            counts = count_todos(payload)
-            if counts is not None:
-                todos = counts
+    todos = None
+    if not partial and leaf is None:
+        for eid in reversed(tuple(entries)):
+            if eid in lineage and entries[eid][1] is not None:
+                todos = entries[eid][1]
+                break
+    elif leaf is not None:
+        todos = None
+        partial = True
     sid = header["id"]
     goal_data = read_json(path.parent / "extensions" / "goal" / (sid + ".json"), root, budget)
     goal_status = record(goal_data.get("goal")).get("status")
@@ -283,12 +324,12 @@ def session(path, root, agent_dir, budget):
     criteria = selected.get("successCriteria")
     ulw = None
     if isinstance(criteria, list):
-        ulw = {"passed": sum(record(c).get("status") == "passed" for c in criteria),
+        ulw = {"passed": sum(record(c).get("status") == "pass" for c in criteria),
                "total": len(criteria), "status": text(selected.get("status"), 32)}
     return {"id": sid, "cwdLabel": text(Path(header["cwd"]).name or "/", 48),
             "title": title or "Untitled", "activityAt": activity,
             "runtime": runtime_state(sid, budget),
-            "todos": todos, "ulw": ulw, "goal": goal,
+            "todos": todos, "partial": partial, "ulw": ulw, "goal": goal,
             "runningDelegatedTasks": 0, "sessionPath": str(path), "cwd": header["cwd"]}
 
 
@@ -373,10 +414,19 @@ def main():
     item = session(path, root, args.agent_dir, budget)
     if item is None:
         parser.error("invalid or oversized session")
+    todos = item["todos"]
+    todo_summary = (f"{todos['completed']}/{todos['total']} completed"
+                    if todos is not None else "not available")
+    goal_summary = item["goal"]["status"] if item["goal"] else "none"
+    ulw = item["ulw"]
+    ulw_summary = (f"{ulw['passed']}/{ulw['total']} verified ({ulw['status']})"
+                   if ulw else "none")
     print(f"Session: {item['id']}\nTitle: {item['title']}\n"
           f"Directory: {text(item['cwd'], 256)}\nActivity: {item['activityAt']}\n"
-          f"Runtime: {item['runtime']['kind']}\nTodos: {item['todos']}\n"
-          f"Goal: {item['goal']}\nULW: {item['ulw']}")
+          f"Runtime: {item['runtime']['status']}\nTodos: {todo_summary}\n"
+          f"Goal: {goal_summary}\nULW: {ulw_summary}")
+    if item["partial"]:
+        print("Some session data could not be read completely.")
 
 
 if __name__ == "__main__":
