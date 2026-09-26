@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.tmdgusya.omo",
+  "name": "OmO",
+  "version": "0.1.0",
+  "author": "tmdgusya",
+  "license": "Mixed: MIT code; Sustainable Use License 1.0 for OmO-derived cat assets (see LICENSE)",
+  "description": "A compact OmO cat for the Omarchy bar. It runs only while a senpi session is verifiably working, glows during a live ultrawork loop, and opens a native panel of sessions with truthful todo and verified-criteria counts.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OmO",
+    "description": "Cat cell plus active session count; click for the session panel (View, Launch, keyboard navigation).",
+    "category": "AI",
+    "aliases": [
+      "omo",
+      "omo-cat",
+      "senpi-sessions"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "agentDir": "",
+      "taskDir": "",
+      "senpiPath": "senpi",
+      "pollMs": 5000,
+      "pollIdleMs": 15000,
+      "reduceMotion": false,
+      "showCount": true
+    },
+    "schema": [
+      {
+        "key": "senpiPath",
+        "type": "string",
+        "label": "senpi executable",
+        "defaultValue": "senpi",
+        "description": "Absolute senpi executable path for Launch when senpi is not on the desktop shell PATH."
+      },
+      {
+        "key": "pollMs",
+        "type": "integer",
+        "label": "Poll interval while sessions are active (ms)",
+        "min": 2000,
+        "max": 30000,
+        "step": 500,
+        "defaultValue": 5000
+      },
+      {
+        "key": "pollIdleMs",
+        "type": "integer",
+        "label": "Poll interval with no active session (ms)",
+        "min": 5000,
+        "max": 60000,
+        "step": 1000,
+        "defaultValue": 15000
+      },
+      {
+        "key": "reduceMotion",
+        "type": "boolean",
+        "label": "Reduce motion",
+        "defaultValue": false,
+        "description": "Still faces and a steady glow instead of the running cycle, blink, and bolt."
+      },
+      {
+        "key": "showCount",
+        "type": "boolean",
+        "label": "Show active session count",
+        "defaultValue": true
+      },
+      {
+        "key": "agentDir",
+        "type": "path",
+        "label": "Agent directory override",
+        "defaultValue": "",
+        "description": "Passed to the collector as --agent-dir. Empty means ~/.omo/agent; point it at a fixture root for QA."
+      },
+      {
+        "key": "taskDir",
+        "type": "path",
+        "label": "Task registry override",
+        "defaultValue": "",
+        "description": "Passed to the collector as --task-dir. Empty means ~/.omo/senpi-task."
+      }
+    ]
+  }
+}

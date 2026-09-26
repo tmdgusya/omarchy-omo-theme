@@ -258,7 +258,10 @@ class SessionCollectorTests(unittest.TestCase):
         process = self.adapter()
         self.emit(process, "session_start")
         self.assertEqual(self.listing()["sessions"][0]["runtime"]["status"], "idle")
+        signal = self.runtime / "omo-session-state.changed"
+        previous_signal = signal.read_text()
         self.emit(process, "agent_start")
+        self.assertNotEqual(signal.read_text(), previous_signal)
         self.assertEqual(self.listing()["sessions"][0]["runtime"]["working"], True)
         self.emit(process, "ui_prompt_start")
         self.assertEqual(self.listing()["sessions"][0]["runtime"],

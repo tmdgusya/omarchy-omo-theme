@@ -19,7 +19,7 @@ export default function (pi: ExtensionAPI): void {
   let waiting = false;
 
   async function save(): Promise<void> {
-    if (!directory || !sessionId || !start) return;
+    if (!runtime || !directory || !sessionId || !start) return;
     const path = join(directory, `${sessionId}.json`);
     const temporary = join(directory, `.${sessionId}.${process.pid}.${crypto.randomUUID()}`);
     try {
@@ -28,8 +28,11 @@ export default function (pi: ExtensionAPI): void {
         state, waiting,
       }), { mode: 0o600 });
       await rename(temporary, path);
+      await writeFile(`${temporary}.signal`, crypto.randomUUID(), { mode: 0o600 });
+      await rename(`${temporary}.signal`, join(runtime, "omo-session-state.changed"));
     } catch {
       await rm(temporary, { force: true }).catch(() => {});
+      await rm(`${temporary}.signal`, { force: true }).catch(() => {});
       // Desktop integration is optional; never interrupt the agent.
     }
   }
