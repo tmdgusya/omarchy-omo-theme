@@ -1,0 +1,140 @@
+# OmO Nightsea - Omarchy shell surfaces.
+# Mirrors /usr/share/omarchy/default/themed/shell.toml.tpl key for key; only
+# color/alpha tokens change. Sizes, spacing and the type scale stay stock so
+# the bar keeps its 28px vertical width and nothing personal is overridden.
+
+[bar]
+# Fallback when the bar is not transparent; ink floor at glass opacity.
+background       = "#041617"
+background-alpha = 0.72
+text             = "#DCE7E6"
+# Attention = "a human is needed" (butter), kept apart from failure (coral).
+active           = "#F2D38B"
+scale-with-font  = true
+size-horizontal  = 26
+size-vertical    = 28
+
+[hyprland]
+# Moonlight edge: aqua -> plate, same gradient colors.toml hands Hyprland.
+active-border            = "#7FE0D4 #F4F4F4 45deg"
+active-border-foreground = "#7FE0D4 #F4F4F4 45deg"
+
+[controls]
+normal-color        = "#DCE7E6"
+normal-fill-alpha   = 0.04
+normal-border       = "#DCE7E6"
+normal-border-width = 1
+normal-border-alpha = 0.4
+
+hover-cursor-color        = "#DCE7E6"
+hover-cursor-fill-alpha   = 0.08
+hover-cursor-border       = "#DCE7E6"
+hover-cursor-border-width = 1
+hover-cursor-border-alpha = 0.25
+
+focus-color        = "#DCE7E6"
+focus-fill-alpha   = 0.08
+focus-border       = "#DCE7E6"
+focus-border-width = 1
+focus-border-alpha = 0.25
+
+# Selected = tonal fill, no accent stripe.
+selected-color        = "#DCE7E6"
+selected-fill-alpha   = 0.18
+selected-border       = "#DCE7E6"
+selected-border-width = 0
+selected-border-alpha = 1.0
+
+pressed-fill-alpha   = 0.22
+selection-fill-alpha = 0.35
+
+[spacing]
+scale = 1.0
+scale-with-font = true
+
+[font]
+base-size = 12
+
+[popups]
+background       = "#0B1B1D"
+background-alpha = 0.92
+text             = "#DCE7E6"
+border           = "hyprland.active-border"
+border-alpha     = 1.0
+
+[tooltip]
+background       = "#0B1B1D"
+background-alpha = 0.97
+text             = "#DCE7E6"
+border           = "hyprland.active-border-foreground"
+border-alpha     = 1.0
+
+[notifications]
+background       = "#0B1B1D"
+background-alpha = 0.92
+text             = "#DCE7E6"
+border           = "hyprland.active-border"
+border-alpha     = 1.0
+countdown        = "#7FE0D4"
+
+[launcher]
+background                = "#0B1B1D"
+background-alpha          = 0.92
+text                      = "#DCE7E6"
+border                    = "hyprland.active-border-foreground"
+border-alpha              = 1.0
+scrim                     = "#041617"
+scrim-alpha               = 0.5
+selected-background       = "#DCE7E6"
+selected-background-alpha = 0.10
+selected-text             = "#7FE0D4"
+selected-border           = "hyprland.active-border-foreground"
+selected-border-alpha     = 0.0
+
+[menu]
+background                = "#0B1B1D"
+background-alpha          = 0.92
+text                      = "#DCE7E6"
+border                    = "hyprland.active-border-foreground"
+border-alpha              = 1.0
+scrim                     = "#041617"
+scrim-alpha               = 0.5
+selected-background       = "#DCE7E6"
+selected-background-alpha = 0.10
+selected-text             = "#7FE0D4"
+selected-border           = "hyprland.active-border-foreground"
+selected-border-alpha     = 0.0
+
+[polkit]
+background       = "#0B1B1D"
+background-alpha = 0.92
+text             = "#DCE7E6"
+text-error       = "#F08A8A"
+border           = "hyprland.active-border"
+border-error     = "#F08A8A"
+border-alpha     = 1.0
+scrim            = "#041617"
+scrim-alpha      = 0.5
+accent           = "#7FE0D4"
+
+[lock]
+background       = "#041617"
+background-alpha = 0.8
+text             = "#DCE7E6"
+placeholder      = "#95A2A2"
+text-error       = "#F08A8A"
+border           = "hyprland.active-border"
+border-active    = "hyprland.active-border"
+border-error     = "#F08A8A"
+border-alpha     = 1.0
+selection        = "#7FE0D4"
+selection-alpha  = 0.45
+
+[image-picker]
+scrim                   = "#041617"
+scrim-alpha             = 0.5
+text                    = "#DCE7E6"
+selected-border         = "#7FE0D4"
+selected-border-alpha   = 1.0
+unselected-border       = "#DCE7E6"
+unselected-border-alpha = 0.28

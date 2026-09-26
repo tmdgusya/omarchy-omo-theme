@@ -1,0 +1,37 @@
+# OmO Nightsea - moon cat over a deep-teal night sea.
+# Two inks from the OmO icon (#041617 ink, #F4F4F4 plate), one light (aqua),
+# and two honest state colors (butter = needs a human, coral = failed).
+mode = "dark"
+
+accent = "#7FE0D4"
+selection = "#16383A"
+muted = "#3B5658"
+
+background = "#0B1B1D"
+dark_background = "#071416"
+darker_background = "#041617"
+lighter_background = "#12292C"
+
+foreground = "#DCE7E6"
+dark_foreground = "#5F7A7B"
+light_foreground = "#A8BFBF"
+bright_foreground = "#F4F4F4"
+
+# Active window = moonlight edge (aqua -> plate).
+hyprland_active_border = "#7FE0D4 #F4F4F4 45deg"
+
+red = "#F08A8A"
+yellow = "#F2D38B"
+orange = "#F5B27A"
+green = "#9BE6A8"
+cyan = "#7FE0D4"
+blue = "#86BCF2"
+magenta = "#D9A6F0"
+brown = "#B99277"
+
+bright_red = "#F6A3A3"
+bright_yellow = "#F8E0A6"
+bright_green = "#B4EFBD"
+bright_cyan = "#9CF0FF"
+bright_blue = "#A5CDF7"
+bright_magenta = "#E6BFF5"

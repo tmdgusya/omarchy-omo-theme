@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1440" width="2560" height="1440">
+  <title>OmO Nightsea - calm moon cat</title>
+  <defs>
+    <radialGradient id="halo" cx="1640" cy="720" r="868" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9CF0FF" stop-opacity="0.11"/>
+      <stop offset="0.4" stop-color="#7FE0D4" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#7FE0D4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="spark" r="0.5">
+      <stop offset="0" stop-color="#EAFBFF" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#9CF0FF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#9CF0FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="star-glow" r="0.5">
+      <stop offset="0" stop-color="#F4F4F4" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#F4F4F4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F4F4F4" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#F4F4F4" stop-opacity="1"/>
+      <stop offset="1" stop-color="#F4F4F4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bolt-fade-gradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset="0.12" stop-color="#fff"/>
+    </linearGradient>
+    <mask id="bolt-fade" maskUnits="userSpaceOnUse" x="0" y="0" width="2560" height="1440">
+      <rect x="0" y="0" width="2560" height="1440" fill="url(#bolt-fade-gradient)"/>
+    </mask>
+    <linearGradient id="reflection-fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <mask id="reflection-mask" maskUnits="userSpaceOnUse" x="0" y="1123" width="2560" height="317">
+      <rect x="0" y="1123" width="2560" height="220" fill="url(#reflection-fade)"/>
+    </mask>
+    <filter id="blur-1" x="-5%" y="-50%" width="110%" height="200%"><feGaussianBlur stdDeviation="0.8"/></filter>
+    <filter id="blur-4" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="blur-9" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="blur-26" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="26"/></filter>
+    <filter id="blur-44" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="44"/></filter>
+    <filter id="blur-60" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="60"/></filter>
+  </defs>
+
+  <!-- 1. atmosphere: float-rendered, dithered raster (sky, sea, shafts, haze, vignette, grain) -->
+  <rect width="2560" height="1440" fill="#0B1B1D"/>
+  <image href="nightsea-base.png" x="0" y="0" width="2560" height="1440" preserveAspectRatio="none"/>
+  <rect x="0" y="1123" width="2560" height="1" fill="#7FE0D4" fill-opacity="0.10"/>
+
+  <!-- 2. moon reflection: mirrored, squashed, blurred silhouette under the horizon -->
+  <g mask="url(#reflection-mask)" opacity="0.10">
+    <g transform="translate(0 1455.97) scale(1 -0.32) translate(0 -996.79)">
+      <g transform="translate(1147.08 231.41) scale(0.96)">
+        <path d="M231.75 219.82 C224.03 221.42 220.35 223.63 216.23 229.15 C202.18 247.85 196.83 296.38 202.55 353.75 C205.5 383.42 210.68 418.75 216.8 451 C220.38 469.82 220.6 467.32 213.6 485.5 C203.53 511.63 197.53 532.33 193.3 555.5 C171.98 672.72 242.78 755.15 389.75 784.2 C418.25 789.83 452.6 794.13 469.8 794.2 L478.83 794.25 L480.8 792.88 L554.2 794.2 C571.4 794.13 605.75 789.83 634.25 784.2 C781.23 755.15 852.03 672.72 830.7 555.5 C826.48 532.33 820.48 511.63 810.4 485.5 C803.4 467.32 803.63 469.82 807.2 451 C813.33 418.75 818.5 383.42 821.45 353.75 C828.23 285.75 819.53 232.22 800.08 222.27 C781.13 212.57 742.33 228.22 674.55 272.88 C652.85 287.15 655.45 286.8 637.33 278.15 C555.55 239.2 468.45 239.2 386.68 278.15 C368.55 286.8 371.15 287.15 349.45 272.88 C290.18 233.82 250.48 215.92 231.75 219.82 Z" fill="#F4F4F4" filter="url(#blur-60)"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- 3. sea ripples and the moon path under the cat -->
+  <g id="ripples">
+    <rect x="879.78" y="1147.35" width="964.34" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.04"/>
+    <rect x="1890.46" y="1269.93" width="241.02" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="910.7" y="1127.04" width="334.89" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+    <rect x="183.01" y="1262.05" width="569.57" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="461.39" y="1161.45" width="893.78" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.04"/>
+    <rect x="1459.97" y="1137.55" width="652.35" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+    <rect x="1170.46" y="1199.55" width="485.7" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.03"/>
+    <rect x="1527.49" y="1301.31" width="582.78" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="522.61" y="1410.07" width="706.89" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.01"/>
+    <rect x="995.53" y="1404.7" width="428.64" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.01"/>
+    <rect x="621.85" y="1269.08" width="592.13" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="697.91" y="1144.61" width="861.66" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.04"/>
+    <rect x="1747.69" y="1371.59" width="413.09" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.01"/>
+    <rect x="1249.07" y="1197.8" width="784.95" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.03"/>
+    <rect x="1239.41" y="1299.74" width="489.44" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="349.77" y="1304.11" width="649.31" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="1701.81" y="1127.13" width="821.73" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+    <rect x="1484.39" y="1215.89" width="506.87" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.03"/>
+    <rect x="1312.51" y="1329.17" width="689.59" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="1023.57" y="1146.42" width="909.41" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.04"/>
+    <rect x="1620.23" y="1303.85" width="374.47" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.02"/>
+    <rect x="1316.9" y="1129.24" width="487.77" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+    <rect x="1705.05" y="1169.04" width="541.34" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.04"/>
+    <rect x="116.32" y="1128.34" width="940.89" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+    <rect x="1308.06" y="1223.04" width="741.78" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.03"/>
+    <rect x="1176.47" y="1127.03" width="1138.45" height="1.5" rx="0.75" fill="#7FE0D4" fill-opacity="0.05"/>
+  </g>
+  <g id="moon-path" filter="url(#blur-1)">
+    <rect x="1544.26" y="1127.2" width="147.44" height="1.2" fill="url(#streak)" opacity="0.18"/>
+    <rect x="1535.77" y="1215.2" width="177.68" height="1.98" fill="url(#streak)" opacity="0.08"/>
+    <rect x="1599.12" y="1223.99" width="161.8" height="2.05" fill="url(#streak)" opacity="0.07"/>
+    <rect x="1533.4" y="1289.54" width="222.7" height="2.63" fill="url(#streak)" opacity="0.05"/>
+    <rect x="1592.26" y="1162.12" width="102.08" height="1.51" fill="url(#streak)" opacity="0.19"/>
+    <rect x="1631.47" y="1153.78" width="80.74" height="1.44" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1571.74" y="1139.61" width="108.87" height="1.31" fill="url(#streak)" opacity="0.18"/>
+    <rect x="1612.46" y="1130.92" width="100.52" height="1.23" fill="url(#streak)" opacity="0.17"/>
+    <rect x="1621.15" y="1261.91" width="245.23" height="2.39" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1386.7" y="1311.7" width="243.09" height="2.83" fill="url(#streak)" opacity="0.04"/>
+    <rect x="1523.52" y="1190.66" width="106.78" height="1.76" fill="url(#streak)" opacity="0.14"/>
+    <rect x="1562.09" y="1177.71" width="138.98" height="1.65" fill="url(#streak)" opacity="0.17"/>
+    <rect x="1574.86" y="1269.35" width="217.72" height="2.45" fill="url(#streak)" opacity="0.06"/>
+    <rect x="1541.39" y="1137.61" width="150.6" height="1.29" fill="url(#streak)" opacity="0.13"/>
+    <rect x="1605.23" y="1144.59" width="88.71" height="1.35" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1615.83" y="1263.23" width="237.43" height="2.4" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1641.19" y="1254.11" width="176.24" height="2.32" fill="url(#streak)" opacity="0.08"/>
+    <rect x="1584.49" y="1252.23" width="275.5" height="2.3" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1598.16" y="1235.71" width="259.16" height="2.16" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1360.15" y="1308.46" width="280.65" height="2.8" fill="url(#streak)" opacity="0.04"/>
+    <rect x="1514.02" y="1276.2" width="275.82" height="2.51" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1604.92" y="1225.17" width="183.7" height="2.06" fill="url(#streak)" opacity="0.11"/>
+    <rect x="1538.98" y="1280.94" width="227.58" height="2.55" fill="url(#streak)" opacity="0.05"/>
+    <rect x="1544.44" y="1127.14" width="143.35" height="1.2" fill="url(#streak)" opacity="0.2"/>
+    <rect x="1427.11" y="1246.55" width="228.6" height="2.25" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1649.71" y="1273.77" width="216" height="2.49" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1586.51" y="1252.48" width="235.43" height="2.3" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1620.49" y="1137.64" width="101.9" height="1.29" fill="url(#streak)" opacity="0.16"/>
+    <rect x="1598.39" y="1140.44" width="69.26" height="1.32" fill="url(#streak)" opacity="0.19"/>
+    <rect x="1554.34" y="1323.97" width="313.86" height="2.93" fill="url(#streak)" opacity="0.05"/>
+    <rect x="1554.91" y="1240.16" width="262.33" height="2.2" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1571.66" y="1150.77" width="150.2" height="1.41" fill="url(#streak)" opacity="0.18"/>
+    <rect x="1591.2" y="1144.52" width="105.55" height="1.35" fill="url(#streak)" opacity="0.15"/>
+    <rect x="1572.67" y="1143.11" width="99.43" height="1.34" fill="url(#streak)" opacity="0.15"/>
+    <rect x="1572.67" y="1141.79" width="66.16" height="1.33" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1584.58" y="1134.02" width="155.24" height="1.26" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1580.5" y="1142.3" width="105.79" height="1.33" fill="url(#streak)" opacity="0.18"/>
+    <rect x="1535.16" y="1177.55" width="177.56" height="1.64" fill="url(#streak)" opacity="0.15"/>
+    <rect x="1494.33" y="1301.98" width="307.78" height="2.74" fill="url(#streak)" opacity="0.04"/>
+    <rect x="1504.76" y="1226.61" width="196.87" height="2.08" fill="url(#streak)" opacity="0.12"/>
+    <rect x="1559.32" y="1131.4" width="133.79" height="1.24" fill="url(#streak)" opacity="0.2"/>
+    <rect x="1498.75" y="1293.16" width="245.64" height="2.66" fill="url(#streak)" opacity="0.07"/>
+    <rect x="1570.32" y="1154.44" width="115.77" height="1.44" fill="url(#streak)" opacity="0.18"/>
+    <rect x="1620.78" y="1185.64" width="157.14" height="1.72" fill="url(#streak)" opacity="0.12"/>
+    <rect x="1588.37" y="1171.19" width="111.15" height="1.59" fill="url(#streak)" opacity="0.17"/>
+    <rect x="1609.29" y="1229.35" width="237.36" height="2.1" fill="url(#streak)" opacity="0.09"/>
+    <rect x="1561.28" y="1193.44" width="210.82" height="1.78" fill="url(#streak)" opacity="0.12"/>
+    <rect x="1444.86" y="1254.77" width="246.08" height="2.32" fill="url(#streak)" opacity="0.07"/>
+    <rect x="1612.49" y="1240.28" width="193.87" height="2.2" fill="url(#streak)" opacity="0.07"/>
+    <rect x="1588.72" y="1132.35" width="123.42" height="1.25" fill="url(#streak)" opacity="0.21"/>
+    <rect x="1575.95" y="1166.86" width="79.54" height="1.55" fill="url(#streak)" opacity="0.16"/>
+    <rect x="1554.93" y="1348.13" width="359.43" height="3.15" fill="url(#streak)" opacity="0.02"/>
+    <rect x="1634.14" y="1150.23" width="88.07" height="1.4" fill="url(#streak)" opacity="0.15"/>
+    <rect x="1576.34" y="1182.67" width="179.11" height="1.69" fill="url(#streak)" opacity="0.14"/>
+    <rect x="1540.89" y="1276.62" width="256.91" height="2.52" fill="url(#streak)" opacity="0.05"/>
+    <rect x="1514.74" y="1313.25" width="240.48" height="2.84" fill="url(#streak)" opacity="0.05"/>
+    <rect x="1562.44" y="1200.15" width="172.23" height="1.84" fill="url(#streak)" opacity="0.15"/>
+    <rect x="1378.46" y="1358.48" width="282.95" height="3.24" fill="url(#streak)" opacity="0.01"/>
+    <rect x="1506.63" y="1215.86" width="231.62" height="1.98" fill="url(#streak)" opacity="0.13"/>
+    <rect x="1628.87" y="1217.56" width="157.63" height="2" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1520.88" y="1348.04" width="355.38" height="3.15" fill="url(#streak)" opacity="0.02"/>
+    <rect x="1615.34" y="1341.82" width="354.55" height="3.09" fill="url(#streak)" opacity="0.01"/>
+    <rect x="1628.54" y="1141.33" width="57.45" height="1.33" fill="url(#streak)" opacity="0.1"/>
+    <rect x="1402.91" y="1342.67" width="325.02" height="3.1" fill="url(#streak)" opacity="0.02"/>
+  </g>
+
+  <!-- 4. stars, upper right only -->
+  <g id="stars">
+    <circle cx="2031.56" cy="222.5" r="1.81" fill="#F4F4F4" fill-opacity="0.28"/>
+    <circle cx="2156.6" cy="526.79" r="1.85" fill="#F4F4F4" fill-opacity="0.3"/>
+    <circle cx="1513.87" cy="244.96" r="1.45" fill="#F4F4F4" fill-opacity="0.46"/>
+    <circle cx="1631.69" cy="169.05" r="1.69" fill="#F4F4F4" fill-opacity="0.44"/>
+    <circle cx="1775.41" cy="154.14" r="1.37" fill="#F4F4F4" fill-opacity="0.27"/>
+    <circle cx="2239.03" cy="171.16" r="1.35" fill="#F4F4F4" fill-opacity="0.49"/>
+    <circle cx="2029.53" cy="430.16" r="2.17" fill="#F4F4F4" fill-opacity="0.37"/>
+    <circle cx="1809.94" cy="355.11" r="2.59" fill="#F4F4F4" fill-opacity="0.28"/>
+    <circle cx="1809.94" cy="355.11" r="15.56" fill="url(#star-glow)"/>
+    <circle cx="2162.24" cy="318.37" r="2.36" fill="#F4F4F4" fill-opacity="0.47"/>
+    <circle cx="2412.88" cy="448.17" r="1.55" fill="#F4F4F4" fill-opacity="0.31"/>
+    <circle cx="2083.53" cy="101.4" r="2.49" fill="#F4F4F4" fill-opacity="0.43"/>
+    <circle cx="2083.53" cy="101.4" r="14.95" fill="url(#star-glow)"/>
+  </g>
+
+  <!-- 5. halo, rim glow, lightning and the moon cat -->
+  <rect width="2560" height="1440" fill="url(#halo)"/>
+  <g transform="translate(1147.08 231.41) scale(0.96)">
+    <path d="M231.75 219.82 C224.03 221.42 220.35 223.63 216.23 229.15 C202.18 247.85 196.83 296.38 202.55 353.75 C205.5 383.42 210.68 418.75 216.8 451 C220.38 469.82 220.6 467.32 213.6 485.5 C203.53 511.63 197.53 532.33 193.3 555.5 C171.98 672.72 242.78 755.15 389.75 784.2 C418.25 789.83 452.6 794.13 469.8 794.2 L478.83 794.25 L480.8 792.88 L554.2 794.2 C571.4 794.13 605.75 789.83 634.25 784.2 C781.23 755.15 852.03 672.72 830.7 555.5 C826.48 532.33 820.48 511.63 810.4 485.5 C803.4 467.32 803.63 469.82 807.2 451 C813.33 418.75 818.5 383.42 821.45 353.75 C828.23 285.75 819.53 232.22 800.08 222.27 C781.13 212.57 742.33 228.22 674.55 272.88 C652.85 287.15 655.45 286.8 637.33 278.15 C555.55 239.2 468.45 239.2 386.68 278.15 C368.55 286.8 371.15 287.15 349.45 272.88 C290.18 233.82 250.48 215.92 231.75 219.82 Z" fill="#9CF0FF" opacity="0.16" filter="url(#blur-44)"/>
+  </g>
+  
+  <g id="cat" transform="translate(1147.08 231.41) scale(0.96)">
+    <g id="omo-cat-moon">
+    <path d="M231.75 219.82 C224.03 221.42 220.35 223.63 216.23 229.15 C202.18 247.85 196.83 296.38 202.55 353.75 C205.5 383.42 210.68 418.75 216.8 451 C220.38 469.82 220.6 467.32 213.6 485.5 C203.53 511.63 197.53 532.33 193.3 555.5 C171.98 672.72 242.78 755.15 389.75 784.2 C418.25 789.83 452.6 794.13 469.8 794.2 L478.83 794.25 L480.8 792.88 L554.2 794.2 C571.4 794.13 605.75 789.83 634.25 784.2 C781.23 755.15 852.03 672.72 830.7 555.5 C826.48 532.33 820.48 511.63 810.4 485.5 C803.4 467.32 803.63 469.82 807.2 451 C813.33 418.75 818.5 383.42 821.45 353.75 C828.23 285.75 819.53 232.22 800.08 222.27 C781.13 212.57 742.33 228.22 674.55 272.88 C652.85 287.15 655.45 286.8 637.33 278.15 C555.55 239.2 468.45 239.2 386.68 278.15 C368.55 286.8 371.15 287.15 349.45 272.88 C290.18 233.82 250.48 215.92 231.75 219.82 Z" fill="#041617"/>
+    <path d="M231.75 219.82 C224.03 221.42 220.35 223.63 216.23 229.15 C202.18 247.85 196.83 296.38 202.55 353.75 C205.5 383.42 210.68 418.75 216.8 451 C220.38 469.82 220.6 467.32 213.6 485.5 C203.53 511.63 197.53 532.33 193.3 555.5 C171.98 672.72 242.78 755.15 389.75 784.2 C418.25 789.83 452.6 794.13 469.8 794.2 L478.83 794.25 L480.8 792.88 C487.4 788.33 486.05 776.83 478.03 769.33 C468.35 760.28 454.28 756.03 408 748.2 C332.9 735.53 301.78 724.08 270 697.45 C236.05 669 219.7 625.5 224.78 577.2 C238.4 447.32 390.2 359.05 563 380.55 C700.65 397.65 800 486.92 800 593.5 C800 658.68 763.45 706.55 696.08 729.7 C672.9 737.65 657.73 741.18 616 748.2 C569.73 756.03 555.65 760.28 545.98 769.33 C537.95 776.83 536.6 788.33 543.2 792.88 L545.18 794.25 L554.2 794.2 C571.4 794.13 605.75 789.83 634.25 784.2 C781.23 755.15 852.03 672.72 830.7 555.5 C826.48 532.33 820.48 511.63 810.4 485.5 C803.4 467.32 803.63 469.82 807.2 451 C813.33 418.75 818.5 383.42 821.45 353.75 C828.23 285.75 819.53 232.22 800.08 222.27 C781.13 212.57 742.33 228.22 674.55 272.88 C652.85 287.15 655.45 286.8 637.33 278.15 C555.55 239.2 468.45 239.2 386.68 278.15 C368.55 286.8 371.15 287.15 349.45 272.88 C290.18 233.82 250.48 215.92 231.75 219.82 Z M335.05 303.45 C339.43 307.82 338.15 310.15 324.83 321.92 C299.13 344.67 274.95 373.25 257 402.15 C254.58 406.05 252 410.1 251.3 411.13 C245.78 419.15 235.15 413.03 239.58 404.38 C243.4 396.85 261.65 371.03 274.28 355.25 C288.73 337.17 310.93 314.9 325 304.38 C329.78 300.82 332.2 300.6 335.05 303.45 Z M697.73 303.47 C710.13 312 734.78 336.55 749.73 355.25 C762.35 371.03 780.6 396.85 784.43 404.38 C788.85 413.03 778.23 419.15 772.7 411.13 C772 410.1 769.43 406.05 767 402.15 C749.05 373.25 724.88 344.67 699.18 321.92 C685.8 310.1 684.55 307.82 689 303.38 C691.5 300.88 693.98 300.9 697.73 303.47 Z M497.75 391.3 C396.78 396.42 317.45 432.95 270.6 495.9 C224.6 557.72 226.78 640.75 275.5 684.4 C304.53 710.4 336.68 722.35 411 734.78 C445.35 740.5 460.95 744.28 472.4 749.55 C491.25 758.25 501.48 774.55 498.23 790.8 C497.98 792.03 498.2 792.6 499.4 793.9 L500.9 795.5 L512 795.5 L523.1 795.5 L524.6 793.9 C525.8 792.6 526.03 792.03 525.78 790.8 C522.53 774.55 532.75 758.25 551.6 749.55 C563.05 744.28 578.65 740.5 613 734.78 C687.33 722.35 719.48 710.4 748.5 684.4 C800.6 637.75 799.15 550.05 745.23 485.5 C693.65 423.78 595.35 386.35 497.75 391.3 Z M381.65 500.65 C415.55 509.65 438.45 548.38 431.6 585.1 C420.95 642.05 360.2 663.7 321 624.5 C283.58 587.1 297.9 519.05 346.78 502.03 C356.6 498.6 371.68 498 381.65 500.65 Z M668.65 499.78 C705.93 506.3 731.25 547.8 722.5 588.08 C710.33 644.25 644.8 663.68 609.38 621.6 C566.4 570.55 606.15 488.85 668.65 499.78 Z M494.95 574.28 C499.25 575.28 503.48 577.6 507.33 581.1 C509.7 583.25 510.9 584 512 584 C513.1 584 514.3 583.25 516.68 581.1 C534.63 564.85 559.58 576.4 563.03 602.6 C563.9 609.28 563.48 626.8 562.4 628.8 C559.43 634.28 553.65 635.08 550.13 630.5 C548.43 628.28 548.3 627.4 548 613.75 C547.68 598.17 547.38 596.88 543 592.8 C537.7 587.85 530.1 587.83 524.63 592.75 C520.13 596.78 519.83 598.05 519.5 613.75 C519.2 627.4 519.08 628.28 517.38 630.5 C514.33 634.47 509.68 634.47 506.63 630.5 C504.93 628.28 504.8 627.4 504.5 613.75 C504.18 598.05 503.88 596.78 499.38 592.75 C493.9 587.83 486.3 587.85 481 592.8 C476.63 596.88 476.33 598.17 476 613.75 C475.7 627.4 475.58 628.28 473.88 630.5 C470.35 635.08 464.58 634.28 461.6 628.8 C459.75 625.4 460.25 602.83 462.35 595.5 C466.6 580.65 481.3 571.05 494.95 574.28 Z M358.5 516.75 C312.05 526.05 302.75 597.45 344.85 621.53 C376.85 639.83 414.5 613.08 414.5 572 C414.5 537.22 387.8 510.88 358.5 516.75 Z M649.75 516.72 C606.43 525.3 594.55 591.25 631.45 618.45 C663.63 642.17 705.98 615.75 706 571.95 C706 537.15 679.25 510.88 649.75 516.72 Z" fill="#F4F4F4" fill-rule="evenodd"/>
+  </g>
+  </g>
+</svg>
