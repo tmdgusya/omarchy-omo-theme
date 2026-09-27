@@ -90,6 +90,32 @@ export function parseAnthropicUsage(payload) {
   return limits;
 }
 
+export async function readAnthropicUsage(query) {
+  return query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
+    skipBehaviors: true,
+  });
+}
+
+export function anthropicQuotaResult(payload) {
+  if (!payload?.rate_limits_available || !payload.rate_limits) {
+    return unavailable("backend_unavailable");
+  }
+  const limits = parseAnthropicUsage(payload.rate_limits);
+  return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_limits");
+}
+
+export function anthropicFailureReason(error, classify) {
+  switch (classify(error).kind) {
+    case "rate_limit":
+      return "rate_limited";
+    case "auth_error":
+    case "org_not_allowed":
+      return "auth_unavailable";
+    default:
+      return "request_failed";
+  }
+}
+
 export function summarizeUsageLines(lines) {
   const usage = new Map();
   for (const line of lines) {
@@ -155,6 +181,64 @@ function unavailable(reason) {
   return { status: "unavailable", reason, source: "provider", limits: [] };
 }
 
+async function nativeAnthropicUsage(root) {
+  const [authLane, sdk, executable, settings] = await Promise.all([
+    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/auth-lane.js")),
+    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/sdk-boundary.js")),
+    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/executable.js")),
+    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/settings.js")),
+  ]);
+  await sdk.loadClaudeAgentSdk();
+  const controller = new AbortController();
+  const queryReady = Promise.withResolvers();
+  let sdkQuery;
+  async function* idlePrompt() {
+    await new Promise(resolve => controller.signal.addEventListener("abort", resolve, { once: true }));
+  }
+  const messages = authLane.queryWithAuthLane({
+    prompt: idlePrompt(),
+    query: sdk.getSdkBoundary().query,
+    providerSettings: settings.loadAnthropicSubscriptionProviderSettingsFromDisk(process.cwd()),
+    signal: controller.signal,
+    buildOptions: () => ({
+      cwd: process.cwd(),
+      tools: [],
+      permissionMode: "dontAsk",
+      settingSources: [],
+      pathToClaudeCodeExecutable: executable.resolveClaudeCodeRun(executable.defaultExecutableDeps()).executable,
+      abortController: controller,
+    }),
+    onQuery: queryReady.resolve,
+  });
+  let pumpError;
+  const pump = (async () => {
+    try {
+      for await (const _message of messages) {
+        // The idle prompt emits no model messages; iteration keeps the control channel alive.
+      }
+    } catch (error) {
+      queryReady.reject(error);
+      if (!controller.signal.aborted) pumpError = error;
+    }
+  })();
+  let timeout;
+  const deadline = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error("usage_timeout")), 10000);
+  });
+  let result;
+  try {
+    sdkQuery = await Promise.race([queryReady.promise, deadline]);
+    result = await Promise.race([readAnthropicUsage(sdkQuery), deadline]);
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
+    sdkQuery?.close();
+    await pump;
+  }
+  if (pumpError) throw pumpError;
+  return result;
+}
+
 async function quotaFor(providerId, context) {
   const ready = context.accounts.filter(account => !account.blocked);
   const selected = ready.find(account => account.pinned) ?? ready[0];
@@ -173,25 +257,13 @@ async function quotaFor(providerId, context) {
       return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_limits");
     }
     if (providerId === "anthropic-subscription") {
-      const credential = context.storage.get(providerId);
-      const slots = credential?.type === "oauth"
-        ? context.listAnthropicAccounts(credential, name => process.env[name])
-        : [];
-      const slot = slots.find(account => account.name === selected.name);
-      const token = slot?.source === "env"
-        ? context.envSlotToken(name => process.env[name], slot.name)
-        : slot?.access;
-      if (!token || (slot.expires > 0 && slot.expires <= Date.now())) return unavailable("auth_unavailable");
-      const payload = await fetchJson("https://api.anthropic.com/api/oauth/usage", {
-        Authorization: `Bearer ${token}`,
-        "anthropic-beta": "oauth-2025-04-20",
-        Accept: "application/json",
-      });
-      const limits = parseAnthropicUsage(payload);
-      return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_limits");
+      return anthropicQuotaResult(await context.anthropicUsage());
     }
     return unavailable("unsupported");
-  } catch {
+  } catch (error) {
+    if (providerId === "anthropic-subscription") {
+      return unavailable(anthropicFailureReason(error, context.classifyAnthropicError));
+    }
     return unavailable("request_failed");
   }
 }
@@ -200,11 +272,11 @@ async function collect() {
   const root = await packageRoot();
   const agentDir = process.env.OMO_CODING_AGENT_DIR ?? join(homedir(), ".omo", "agent");
   const authPath = join(agentDir, "auth.json");
-  const [{ ModelRuntime }, { AuthStorage }, credentialAccounts, anthropicAccounts, piAi] = await Promise.all([
+  const [{ ModelRuntime }, { AuthStorage }, credentialAccounts, anthropicErrors, piAi] = await Promise.all([
     import(join(root, "dist/index.js")),
     import(join(root, "dist/core/auth-storage.js")),
     import(join(root, "dist/core/credential-accounts.js")),
-    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/accounts.js")),
+    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/errors.js")),
     import(join(root, "node_modules/@earendil-works/pi-ai/dist/index.js")),
   ]);
   const storage = AuthStorage.create(authPath);
@@ -224,8 +296,8 @@ async function collect() {
       accounts,
       runtime,
       storage,
-      listAnthropicAccounts: anthropicAccounts.listAccounts,
-      envSlotToken: anthropicAccounts.envSlotToken,
+      anthropicUsage: () => nativeAnthropicUsage(root),
+      classifyAnthropicError: anthropicErrors.classifySdkError,
       extractAccountId: piAi.extractChatGptSubscriptionAccountId,
     });
     const selected = accounts.find(account => account.pinned) ?? accounts.find(account => !account.blocked);
