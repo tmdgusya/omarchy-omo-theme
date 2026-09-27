@@ -3,7 +3,7 @@
     "width": 2560,
     "height": 1440
   },
-  "base": "../../backgrounds/01-nightsea-calm.png",
+  "base": "../../backgrounds/04-nightsea-calm.png",
   "blend": "source-over",
   "contract": "backgrounds/02-nightsea-storm.png == base + strike layers in `order`, each drawn at its x/y",
   "anchors": {

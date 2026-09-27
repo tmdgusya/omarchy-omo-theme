@@ -77,7 +77,7 @@ const OPEN_LIGHT = { x: CAT_CENTER.x, y: HORIZON + 90 };
 const OPEN_BAND = { ax: 1000, ay: 0, bx: 2000, by: HORIZON, halfWidth: 260 };
 
 const SCENES = {
-  calm: { svg: "wallpaper-nightsea-calm.svg", png: "01-nightsea-calm.png", base: BASE_NAME, cat: true, bolt: false },
+  calm: { svg: "wallpaper-nightsea-calm.svg", png: "04-nightsea-calm.png", base: BASE_NAME, cat: true, bolt: false },
   storm: { svg: "wallpaper-nightsea-cat.svg", png: "02-nightsea-storm.png", base: BASE_NAME, cat: true, bolt: true },
   open: { svg: "wallpaper-nightsea-open.svg", png: "03-nightsea-open.png", base: OPEN_BASE_NAME, cat: false, bolt: false },
 };
@@ -1233,7 +1233,7 @@ if (BUILD_CAT) {
 
   const manifest = {
     frame: { width: W, height: H },
-    base: "../../backgrounds/01-nightsea-calm.png",
+    base: "../../backgrounds/04-nightsea-calm.png",
     blend: "source-over",
     contract: "backgrounds/02-nightsea-storm.png == base + strike layers in `order`, each drawn at its x/y",
     anchors: { catCenter: CAT_CENTER, catBox: { x: f(catBox.x), y: f(catBox.y), w: f(catBox.w), h: f(catBox.h) }, leftEarTip: { x: f(leftEarTip.x), y: f(leftEarTip.y) }, horizon: HORIZON },

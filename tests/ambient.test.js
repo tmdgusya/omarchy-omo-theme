@@ -120,7 +120,7 @@ describe("storm and overlay gates", () => {
 
   test("stops motion for every required boundary", () => {
     // Given: a fully enabled Storm on the calm background.
-    const calm = "/theme/backgrounds/01-nightsea-calm.png"
+    const calm = "/theme/backgrounds/04-nightsea-calm.png"
 
     // When/Then: each single stop input independently forces motion false.
     expect(Lease.overlayMotion(true, true, false, false, calm)).toBe(true)

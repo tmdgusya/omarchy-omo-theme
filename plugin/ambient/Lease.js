@@ -2,7 +2,7 @@
 
 var ACTIVE_BORDER_KEYWORD = "rgba(eafbffff) rgba(7fe0d4ff) 45deg"
 var ACTIVE_BORDER_RAW = "ffeafbff ff7fe0d4 45deg"
-var CALM_BACKGROUND = "01-nightsea-calm.png"
+var CALM_BACKGROUND = "04-nightsea-calm.png"
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {}
