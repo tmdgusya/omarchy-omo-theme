@@ -229,7 +229,35 @@ class SessionCollectorTests(unittest.TestCase):
         self.assertFalse(item["partial"])
         self.assertNotIn("x" * 100, json.dumps(item))
 
-    def test_scan_limit_retains_header_without_inventing_todos(self):
+    def test_giant_tool_result_keeps_later_branch_todos_and_activity(self):
+        self.write_session(
+            {"type": "message", "id": "first", "parentId": None,
+             "timestamp": "2026-09-26T01:00:00Z",
+             "message": {"role": "user", "content": "Current work"}},
+        )
+        with self.path.open("a") as stream:
+            stream.write('{"type":"message","id":"giant","parentId":"first",'
+                         '"timestamp":"2026-09-26T02:00:00Z","message":'
+                         '{"role":"toolResult","toolName":"read","content":"')
+            stream.write("A" * (17 * 1024 * 1024))
+            stream.write('"}}\n')
+            for eid, parent, count in (("current", "giant", 2),
+                                       ("other", "first", 9)):
+                stream.write(json.dumps({"type": "custom", "id": eid,
+                    "parentId": parent, "customType": "senpi.todo-state",
+                    "data": {"todos": [{"content": str(i), "status": "completed"}
+                                       for i in range(count)]}}) + "\n")
+            stream.write(json.dumps({"type": "message", "id": "last",
+                "parentId": "current", "timestamp": "2026-09-26T03:00:00Z",
+                "message": {"role": "assistant", "content": "Done"}}) + "\n")
+
+        item = self.listing()["sessions"][0]
+        self.assertEqual(item["activityAt"], "2026-09-26T03:00:00Z")
+        self.assertEqual(item["todos"], {"completed": 2, "pending": 0,
+                         "inProgress": 0, "abandoned": 0, "total": 2})
+        self.assertFalse(item["partial"])
+
+    def test_large_results_without_todos_do_not_invent_progress(self):
         self.write_session({"type": "session_info", "id": "named", "parentId": None,
                             "name": "Bounded session"})
         with self.path.open("a") as stream:
@@ -240,7 +268,7 @@ class SessionCollectorTests(unittest.TestCase):
         item = self.listing()["sessions"][0]
         self.assertEqual(item["title"], "Bounded session")
         self.assertIsNone(item["todos"])
-        self.assertTrue(item["partial"])
+        self.assertFalse(item["partial"])
 
     def test_task_registry_budget_preserves_collected_sessions(self):
         self.write_session()

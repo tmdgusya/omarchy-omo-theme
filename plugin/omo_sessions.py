@@ -16,15 +16,22 @@ CANDIDATE_LIMIT = 128
 PATH_LIMIT = 2048
 FILE_LIMIT = 192
 BYTE_LIMIT = 96 * 1024 * 1024
-SESSION_BYTES = 64 * 1024 * 1024
+SCAN_LIMIT = 512 * 1024 * 1024
 JSON_BYTES = 256 * 1024
-LINE_BYTES = 12 * 1024 * 1024
+LINE_BYTES = 256 * 1024
 ENTRY_LIMIT = 30000
 OUTPUT_BYTES = 128 * 1024
 SECONDS = 4
 ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,100}$")
 CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 STATUSES = ("completed", "pending", "in_progress", "abandoned")
+LARGE_RESULT = re.compile(
+    rb'^\s*\{\s*"type"\s*:\s*"message"\s*,\s*"id"\s*:\s*"([^"\\]{1,120})"\s*,'
+    rb'\s*"parentId"\s*:\s*(?:"([^"\\]{1,120})"|null)\s*,'
+    rb'(?:\s*"timestamp"\s*:\s*"([^"\\]{1,40})"\s*,)?'
+    rb'\s*"message"\s*:\s*\{\s*"role"\s*:\s*"toolResult"\s*,'
+    rb'(?:\s*"toolCallId"\s*:\s*"[^"\\]{0,200}"\s*,)?'
+    rb'\s*"toolName"\s*:\s*"([^"\\]{1,100})"')
 
 
 def record(value):
@@ -45,6 +52,7 @@ class Budget:
         self.paths = 0
         self.files = 0
         self.bytes = 0
+        self.scanned = 0
         self.limited = False
 
     def check(self, size=0, path=False):
@@ -226,29 +234,52 @@ def session(path, root, agent_dir, budget):
                 before = os.fstat(stream.fileno())
                 if not stat.S_ISREG(before.st_mode) or not budget.check():
                     return None
-                consumed = 0
-                while consumed < SESSION_BYTES and len(entries) < ENTRY_LIMIT:
-                    if time.monotonic() >= budget.deadline or budget.bytes >= BYTE_LIMIT:
+                while len(entries) < ENTRY_LIMIT:
+                    if (time.monotonic() >= budget.deadline or budget.bytes >= BYTE_LIMIT
+                            or budget.scanned >= SCAN_LIMIT):
                         partial = True
                         budget.limited = True
                         break
-                    length = min(LINE_BYTES + 1, SESSION_BYTES - consumed,
-                                 BYTE_LIMIT - budget.bytes)
-                    line = stream.readline(length)
+                    line = stream.readline(min(LINE_BYTES + 1, SCAN_LIMIT - budget.scanned))
                     if not line:
                         break
-                    consumed += len(line)
-                    budget.bytes += len(line)
+                    budget.scanned += len(line)
                     if not line.endswith(b"\n"):
-                        if stream.tell() < before.st_size and (len(line) >= LINE_BYTES
-                                or consumed >= SESSION_BYTES or budget.bytes >= BYTE_LIMIT):
+                        prefix = line
+                        while line and not line.endswith(b"\n"):
+                            if (time.monotonic() >= budget.deadline
+                                    or budget.scanned >= SCAN_LIMIT):
+                                break
+                            line = stream.readline(min(LINE_BYTES, SCAN_LIMIT - budget.scanned))
+                            budget.scanned += len(line)
+                        if not line.endswith(b"\n"):
+                            if stream.tell() < before.st_size:
+                                partial = True
+                                budget.limited = True
+                            break
+                        match = LARGE_RESULT.match(prefix)
+                        if header is None or match is None or match[4] in (b"todo", b"todowrite"):
+                            partial = True
+                            continue
+                        if budget.bytes + match.end() > BYTE_LIMIT:
                             partial = True
                             budget.limited = True
-                        break
-                    try:
-                        entry = record(json.loads(line))
-                    except (ValueError, UnicodeDecodeError, RecursionError):
-                        continue
+                            break
+                        budget.bytes += match.end()
+                        entry = {"type": "message", "id": match[1].decode(),
+                                 "parentId": match[2].decode() if match[2] else None,
+                                 "timestamp": match[3].decode() if match[3] else "",
+                                 "message": {"role": "toolResult", "toolName": match[4].decode()}}
+                    else:
+                        if budget.bytes + len(line) > BYTE_LIMIT:
+                            partial = True
+                            budget.limited = True
+                            break
+                        budget.bytes += len(line)
+                        try:
+                            entry = record(json.loads(line))
+                        except (ValueError, UnicodeDecodeError, RecursionError):
+                            continue
                     if header is None:
                         if (entry.get("type") != "session" or entry.get("version") != 3
                                 or not ID_RE.fullmatch(str(entry.get("id", "")))
@@ -286,10 +317,9 @@ def session(path, root, agent_dir, budget):
                             named = True
                     entries[eid] = (parent, count_todos(payload) if payload is not None else None)
                     leaf = eid
-                if consumed >= SESSION_BYTES or len(entries) >= ENTRY_LIMIT:
-                    if stream.tell() < before.st_size:
-                        partial = True
-                        budget.limited = True
+                if stream.tell() < before.st_size:
+                    partial = True
+                    budget.limited = True
                 after = os.fstat(stream.fileno())
                 if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
                     partial = True
