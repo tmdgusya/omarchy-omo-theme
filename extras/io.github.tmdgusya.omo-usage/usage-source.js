@@ -194,7 +194,10 @@ async function quotaFor(providerId, context) {
 
 async function collect() {
   const root = await packageRoot();
-  const agentDir = process.env.OMO_CODING_AGENT_DIR ?? join(homedir(), ".omo", "agent");
+  const agentDir = process.env.SENPI_CODING_AGENT_DIR
+    ?? process.env.OMO_CODING_AGENT_DIR
+    ?? join(homedir(), ".omo", "agent");
+  process.env.SENPI_CODING_AGENT_DIR = agentDir;
   const authPath = join(agentDir, "auth.json");
   const [{ ModelRuntime }, { AuthStorage }, credentialAccounts, anthropicErrors, piAi] = await Promise.all([
     import(join(root, "dist/index.js")),
