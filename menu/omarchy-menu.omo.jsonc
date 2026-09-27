@@ -1,13 +1,19 @@
 {
   // OmO section for ~/.config/omarchy/extensions/omarchy-menu.jsonc.
-  // scripts/install-menu.sh merges only the omo.* keys below (owned-keys
+  // scripts/install-menu.sh merges only the omo* keys below (owned-keys
   // marker + timestamped backup); uninstall removes exactly those keys.
   // Glyphs are Nerd Font (md) codepoints, never emoji.
+  //
+  // omo-launch is a root row and the first key here: Menu.qml orders rows by
+  // first appearance (MenuModel.mergeMenuSources), stock rows first, so it is
+  // the first row this extension adds to the root menu. It opens the
+  // SUPER+ALT+O launcher served by the plugin service (IPC omoLauncher).
   //
   // omo.sessions runs menu/omo-menu-sessions --pick as an action: Menu.qml in
   // this Omarchy build only runs built-in providers (Menu.qml:338-339), so a
   // custom `provider` name would open an empty submenu. The script's default
   // mode prints MenuModel.swapProviderRows rows for when that hook opens up.
+  "omo-launch": {"icon":"󰄛","label":"OmO — 할 일을 말하세요","action":"omarchy-shell omoLauncher open","description":"한 줄로 말하면 OmO가 시작해요 · Super+Alt+O"},
   "omo": {"icon":"󰄛","label":"OmO","aliases":["omo"],"description":"OmO sessions, launcher and Storm overlay"},
   "omo.new": {"icon":"󰐕","label":"New session","action":"omarchy-shell io.github.tmdgusya.omo launch","description":"Launch omo in a new terminal"},
   "omo.panel": {"icon":"󰉹","label":"Sessions panel","action":"omarchy-shell io.github.tmdgusya.omo open","description":"Open the OmO session panel on the bar"},

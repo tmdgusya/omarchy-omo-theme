@@ -142,7 +142,8 @@ class MenuFragmentTests(unittest.TestCase):
         self.items = json.loads(strip_jsonc((ROOT / "menu" / "omarchy-menu.omo.jsonc").read_text()))
 
     def test_owned_ids_and_rows(self):
-        self.assertTrue(all(i == "omo" or i.startswith("omo.") for i in self.items))
+        self.assertTrue(all(i in ("omo", "omo-launch") or i.startswith("omo.") for i in self.items))
+        self.assertEqual(next(iter(self.items)), "omo-launch")
         self.assertEqual([i for i in self.items if i.startswith("omo.")],
                          ["omo.new", "omo.panel", "omo.sessions", "omo.storm"])
         self.assertEqual(self.items["omo"]["aliases"], ["omo"])

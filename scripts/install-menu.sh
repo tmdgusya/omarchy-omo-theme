@@ -23,10 +23,13 @@ owned_keys="$(jq -c 'keys | sort' <<<"$fragment")"
 created_target=false
 base_text=null
 
+reinstall=false
 if [[ -f "$marker" ]]; then
+  # An older install may own fewer keys; it must never own keys we dropped.
   jq -e --arg target "$target" --argjson keys "$owned_keys" '
     .schema == 1 and .id == "omo-menu" and .target == $target and
-    .ownedKeys == $keys and (.applied | type == "object")
+    (.ownedKeys | type == "array") and (.ownedKeys - $keys == []) and
+    (.applied | type == "object")
   ' "$marker" >/dev/null || { echo "Invalid menu ownership marker" >&2; exit 1; }
   current="$(python3 "$helper" state "$target" "$owned_keys")"
   jq -e --argjson current "$current" '
@@ -34,6 +37,11 @@ if [[ -f "$marker" ]]; then
     all(.ownedKeys[]; $current[.].exists == true and $current[.].value == $applied[.])
   ' "$marker" >/dev/null ||
     { echo "Owned menu entries were edited; refusing to overwrite them" >&2; exit 1; }
+  jq -e --argjson current "$current" --argjson keys "$owned_keys" '
+    .ownedKeys as $owned | all(($keys - $owned)[]; $current[.].exists == false)
+  ' "$marker" >/dev/null ||
+    { echo "Refusing to claim existing omo* menu entries" >&2; exit 1; }
+  reinstall=true
   prior_hash="$(jq -r '.installedSha256 // ""' "$marker")"
   current_hash="$(sha256sum "$target" | cut -d' ' -f1)"
   if [[ "$current_hash" == "$prior_hash" ]]; then
@@ -63,6 +71,10 @@ if [[ -f "$target" ]]; then
   while [[ -e "$backup" ]]; do backup="$target.bak.omo.$stamp.$n"; ((n+=1)); done
   cp -p -- "$target" "$backup"
   printf 'Saved menu backup: %s\n' "$backup"
+fi
+# Re-add owned keys in bundled order so omo-launch stays ahead of "omo".
+if [[ "$reinstall" == true ]]; then
+  python3 "$helper" remove "$target" "$(jq -c '.ownedKeys' "$marker")"
 fi
 python3 "$helper" merge "$target" "$fragment"
 installed_hash="$(sha256sum "$target" | cut -d' ' -f1)"
