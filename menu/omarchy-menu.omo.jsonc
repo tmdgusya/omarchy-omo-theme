@@ -13,7 +13,7 @@
   // this Omarchy build only runs built-in providers (Menu.qml:338-339), so a
   // custom `provider` name would open an empty submenu. The script's default
   // mode prints MenuModel.swapProviderRows rows for when that hook opens up.
-  "omo-launch": {"icon":"󰄛","label":"OmO — 할 일을 말하세요","action":"omarchy-shell omoLauncher open","description":"한 줄로 말하면 OmO가 시작해요 · Super+Alt+O"},
+  "omo-launch": {"icon":"󰄛","label":"OmO — What would you like done?","action":"omarchy-shell omoLauncher open","description":"Start OmO with one sentence · Super+Alt+O"},
   "omo": {"icon":"󰄛","label":"OmO","aliases":["omo"],"description":"OmO sessions, launcher and Storm overlay"},
   "omo.new": {"icon":"󰐕","label":"New session","action":"omarchy-shell io.github.tmdgusya.omo launch","description":"Launch omo in a new terminal"},
   "omo.panel": {"icon":"󰉹","label":"Sessions panel","action":"omarchy-shell io.github.tmdgusya.omo open","description":"Open the OmO session panel on the bar"},

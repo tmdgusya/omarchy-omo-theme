@@ -15,9 +15,9 @@ const Notify = load("notify/Notify.js")
 
 const NOW = Date.parse("2026-09-27T01:00:00Z")
 const iso = (ms) => new Date(ms).toISOString()
-const WAITING = "OmO? 결정 하나 필요해요"
-const DONE = "^m^ 다 됐어요. 확인만 하세요"
-const ERROR = ">m< 여기서 막혔어요"
+const WAITING = "OmO? One decision needed."
+const DONE = "^m^ Done. Ready for your review."
+const ERROR = ">m< We hit a blocker."
 
 const RUNTIME = {
   working: { kind: "live", working: true, status: "working", evidence: "extension" },

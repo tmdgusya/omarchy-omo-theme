@@ -7,7 +7,7 @@
 // directory; keep it as is.
 //
 // A locked screen is the sleep state: the -m- face on its plate squircle, the
-// face table's line "자리 비우셔도 돼요.", the time, and the field. Nothing
+// face table's line "Step away. We have this.", the time, and the field. Nothing
 // loops, so the lock idles at 0 fps; the only motion is the host's scene
 // shake on a wrong password and its unlock transition. Colors come from the
 // shell's Color.lock tokens, type from the DESIGN-v3 scale (11/12/14/20).
@@ -28,7 +28,7 @@ DesignBase {
   readonly property int type14: Style.font.title
   readonly property int type12: Style.font.body
   readonly property int faceSize: Style.space(128)
-  readonly property var weekdays: ["일", "월", "화", "수", "목", "금", "토"]
+  readonly property var weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   // Wider than the shake amplitude (DesignBase moves the scene up to 14 px)
   // so the shake never uncovers the compositor's black behind the surface.
   readonly property int overscan: Style.space(16)
@@ -81,7 +81,7 @@ DesignBase {
 
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "자리 비우셔도 돼요."
+      text: "Step away. We have this."
       textFormat: Text.PlainText
       color: Color.lock.text
       font.family: lock.sans
@@ -117,7 +117,7 @@ DesignBase {
       radius: Math.round(height * 0.225)
       outlineThickness: 1
       fontScale: lock.type14 / Style.font.heading
-      placeholder: "비밀번호"
+      placeholder: "Password"
     }
 
     Item { width: 1; height: Style.space(12) }
@@ -126,8 +126,8 @@ DesignBase {
       anchors.horizontalCenter: parent.horizontalCenter
       opacity: lock.snapshotMode ? 0 : 1
       text: lock.failedAttempts > 0
-        ? lock.failedAttempts + "번 틀렸어요."
-        : (lock.fingerprintConfigured ? lock.fingerprintHint("센서를 터치하거나 Enter를 누르세요.") : "Enter를 누르면 열려요.")
+        ? lock.failedAttempts + (lock.failedAttempts === 1 ? " failed attempt." : " failed attempts.")
+        : (lock.fingerprintConfigured ? lock.fingerprintHint("Touch the sensor or press Enter.") : "Press Enter to unlock.")
       textFormat: Text.PlainText
       color: lock.failedAttempts > 0 ? Color.lock.textError : Color.lock.placeholder
       font.family: lock.sans

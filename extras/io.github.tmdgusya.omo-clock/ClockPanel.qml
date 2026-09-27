@@ -12,7 +12,7 @@ Panel {
   property date today: new Date()
   readonly property var barIdentity: hostWidget || root
   readonly property var weekdayNames: [
-    "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
   ]
   readonly property color contentColor: bar ? bar.foreground : Color.foreground
   readonly property string monoFamily: bar ? bar.fontFamily : Style.font.family

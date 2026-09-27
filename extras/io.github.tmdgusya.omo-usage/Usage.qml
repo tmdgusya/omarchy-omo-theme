@@ -91,11 +91,11 @@ BarWidget {
       spacing: 4
 
       Image {
-        source: Qt.resolvedUrl("assets/omo-face-idle.svg")
-        Layout.preferredWidth: 20
-        Layout.preferredHeight: 20
-        sourceSize.width: 40
-        sourceSize.height: 40
+        source: Qt.resolvedUrl("assets/omo-head-idle.svg")
+        Layout.preferredWidth: 24
+        Layout.preferredHeight: 24
+        sourceSize.width: 48
+        sourceSize.height: 48
         fillMode: Image.PreserveAspectFit
       }
 
@@ -125,11 +125,11 @@ BarWidget {
 
       Image {
         anchors.horizontalCenter: parent.horizontalCenter
-        width: 20
-        height: 20
-        source: Qt.resolvedUrl("assets/omo-face-idle.svg")
-        sourceSize.width: 40
-        sourceSize.height: 40
+        width: 24
+        height: 24
+        source: Qt.resolvedUrl("assets/omo-head-idle.svg")
+        sourceSize.width: 48
+        sourceSize.height: 48
         fillMode: Image.PreserveAspectFit
       }
 

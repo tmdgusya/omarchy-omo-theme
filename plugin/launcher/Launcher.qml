@@ -93,7 +93,7 @@ Scope {
     var text = String(input.text).trim()
     var argv = commandFor(text)
     if (!argv) {
-      notice = "launcherPath는 senpi, omo, 또는 절대 경로여야 해요."
+      notice = "launcherPath must be senpi, omo, or an absolute path."
       return false
     }
     Quickshell.execDetached(argv)
@@ -211,7 +211,7 @@ Scope {
           anchors.fill: parent
           verticalAlignment: Text.AlignVCenter
           visible: input.text === ""
-          text: root.notice !== "" ? root.notice : "할 일을 말하세요."
+          text: root.notice !== "" ? root.notice : "What would you like done?"
           color: root.notice !== "" ? root.coral : root.muted
           font: input.font
           elide: Text.ElideRight

@@ -7,7 +7,7 @@ import qs.Ui
 import "Model.js" as Model
 
 // OmO bar widget (docs/DESIGN-v3.md): the face cell — a 20 px squircle-plate
-// face, a mono count badge and, on a horizontal bar, one line of Korean copy
+// face, a mono count badge and, on a horizontal bar, one line of English copy
 // while a session needs eyes — plus the keyboard-driven session panel. Same
 // shape as plugins/agents/Panel.qml, so shell summon/hide/toggle and the
 // bar's popout coordinator treat it like a first-party panel widget.
@@ -28,7 +28,7 @@ Panel {
   readonly property bool reduceMotion: Model.settingBool(settings, "reduceMotion", false)
   readonly property bool showCount: Model.settingBool(settings, "showCount", true)
   readonly property string senpiPath: Model.settingString(settings, "senpiPath") || "senpi"
-  // What starts a session (새로 시작, 열기 -> resume): the launcher setting,
+  // What starts a session (New session, Open -> resume): the launcher setting,
   // else the senpi executable, else plain `senpi` on the shell PATH.
   readonly property string launcherPath: Model.settingString(settings, "launcherPath") || senpiPath
   readonly property bool trackingInstalled: Model.settingBool(settings, "trackingInstalled", false)
@@ -37,7 +37,7 @@ Panel {
     || Quickshell.env("HOME") + "/.omo/agent"
   // Bundled next to this file; loaded into every session the widget launches.
   readonly property string extensionPath: Qt.resolvedUrl("omo-status.ts").toString().replace(/^file:\/\//, "")
-  // What 열기 needs to decide between focus, resume and "cannot".
+  // What Open needs to decide between focus, resume and "cannot".
   readonly property var openOptions: ({
     extensionPath: extensionPath,
     launcherPath: launcherPath,
@@ -61,6 +61,7 @@ Panel {
   // the bar (6 px at 32, 8 px at 36); badge and copy run along the bar.
   readonly property int faceSize: Style.space(20)
   readonly property int cellInset: Math.max(Style.spacing.xxs, Math.floor((barSize - faceSize) / 2))
+  readonly property int panelContentWidth: Style.space(420)
   readonly property real openPanelIndicatorWidth: barSize
   readonly property real openPanelIndicatorHeight: barSize
 
@@ -77,7 +78,7 @@ Panel {
       var session = collector.sessions[tooltipIndex]
       return Model.elide(session.title, 48) + " \u00b7 " + Model.stateLabelKo(Model.effectiveState(session, nowMs, dismissed))
     }
-    if (collector.stale) return "OmO \u00b7 세션 정보를 읽지 못했어요 \u00b7 " + collector.staleReason
+    if (collector.stale) return "OmO \u00b7 Couldn't load sessions \u00b7 " + collector.staleReason
     return Model.summaryLine(summary)
   }
 
@@ -93,7 +94,7 @@ Panel {
   function launch(cwd) {
     var command = Model.launchCommand(cwd, root.extensionPath, root.launcherPath, root.agentDir, root.trackingInstalled)
     if (!command) {
-      launchNotice = "OmO: launcherPath는 senpi, omo 또는 절대 경로여야 해요."
+      launchNotice = "OmO: launcherPath must be senpi, omo, or an absolute path."
       return false
     }
     launchNotice = ""
@@ -102,7 +103,7 @@ Panel {
     return true
   }
 
-  // 열기 is the one primary action: focus a verified window, resume an ended
+  // Open is the one primary action: focus a verified window, resume an ended
   // session, or say why neither is possible on the card itself. Returns the
   // result text used by both the panel and focus(id) IPC.
   function openSession(session) {
@@ -319,7 +320,9 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
+    // The structured detail keeps a readable value column while
+    // fittedContentWidth still clamps the panel on narrow displays.
+    contentWidth: panel.fittedContentWidth(root.panelContentWidth)
     contentHeight: panel.fittedContentHeight(list.implicitHeight, Style.space(640))
     // Hairline frame instead of the kit's 2px default; a theme border-width
     // in [popups] still wins.
@@ -424,7 +427,7 @@ Panel {
           id: foldText
           textFormat: Text.PlainText
           anchors.centerIn: parent
-          text: "\u2193 " + root.rowsBelowFold + "개 더"
+          text: "\u2193 " + root.rowsBelowFold + " more"
           color: root.panelForeground
           font.family: Model.TOKENS.sansFamily
           font.pixelSize: Style.font.bodySmall

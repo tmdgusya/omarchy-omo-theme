@@ -9,7 +9,7 @@ BarWidget {
   moduleName: "io.github.tmdgusya.omo-clock"
 
   property date displayDate: clock.date
-  readonly property var weekdayNames: ["일", "월", "화", "수", "목", "금", "토"]
+  readonly property var weekdayNames: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   readonly property string timeText: Qt.formatDateTime(displayDate, "HH:mm")
   readonly property string hourText: Qt.formatDateTime(displayDate, "HH")
   readonly property string minuteText: Qt.formatDateTime(displayDate, "mm")

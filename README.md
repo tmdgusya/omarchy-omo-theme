@@ -10,12 +10,12 @@ while OmO is working (with a small lightning bolt during verified
 ultrawork), amber when it needs your decision, coral when it is stuck.
 
 - **One key to start.** Press `SUPER + ALT + O`, type what you want done
-  ("할 일을 말하세요."), press Enter. OmO opens in Ghostty with that task.
+  ("What would you like done?"), press Enter. OmO opens in Ghostty with that task.
 - **A bar that shows the work.** The default preset puts a 32px bar on top:
   OmO menu button, ring workspace markers, OmO clock, and a cat cell with the
   number of running sessions. A left 36px variant is included.
-- **Sessions at a glance.** Click the cat for 진행 중 / 결정 필요 / 완료,
-  with real todo and verified-criteria counts (never a guessed ETA). 열기
+- **Sessions at a glance.** Click the cat for Working / Needs you / Done,
+  with real todo and verified-criteria counts (never a guessed ETA). Open
   focuses the existing window or resumes an ended session.
 - **Honest motion.** The cat runs only while a session is verifiably working;
   idle draws nothing, and reduce-motion turns every loop into a still face.
@@ -77,7 +77,7 @@ or `--no-pi-theme`.
 | Bar widget and services | `scripts/install-plugin.sh --track-all-sessions` | copies `plugin/` to `~/.config/omarchy/plugins/io.github.tmdgusya.omo` and enables it |
 | Bar preset | `scripts/install-bar-preset.sh --position top` (or `left`) | backs up `shell.json`, installs the OmO menu button / workspaces / clock widgets, applies the layout as a delta |
 | Shortcut | `scripts/install-keybind.sh` | appends one marked `SUPER + ALT + O` block to `~/.config/hypr/bindings.lua`; refuses if the key is taken |
-| Menu | `scripts/install-menu.sh` | adds "OmO — 할 일을 말하세요" as the first OmO row in the Omarchy menu, keeping your own rows |
+| Menu | `scripts/install-menu.sh` | adds "OmO — What would you like done?" as the first OmO row in the Omarchy menu, keeping your own rows |
 | Terminal palette | `scripts/install-pi-theme.sh` | selects the OmO palette for omo/senpi |
 
 Remove everything with `bash ~/.config/omarchy/themes/omo/scripts/uninstall.sh`.

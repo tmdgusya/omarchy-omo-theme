@@ -22,13 +22,13 @@ BarWidget {
 
   Image {
     anchors.centerIn: parent
-    width: 20
-    height: 20
-    source: Qt.resolvedUrl("assets/omo-face-idle.svg")
+    width: 24
+    height: 24
+    source: Qt.resolvedUrl("assets/omo-head-idle.svg")
     fillMode: Image.PreserveAspectFit
     smooth: true
-    sourceSize.width: 40
-    sourceSize.height: 40
+    sourceSize.width: 48
+    sourceSize.height: 48
   }
 
   MouseArea {

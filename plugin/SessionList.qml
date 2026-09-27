@@ -4,10 +4,10 @@ import QtQuick.Shapes
 import qs.Commons
 import "Model.js" as Model
 
-// Panel content (docs/DESIGN-v3.md): a header (text face, copy, 새로 시작),
-// the sections 진행 중 / 결정 필요 / 완료 with one squircle card per session
-// (face 24, title, project + age, ledger bars, 열기 / 상세 / 닫기 on the
-// selected card), a collapsed 이전 기록 fold, and the key legend. Progress is
+// Panel content (docs/DESIGN-v3.md): a header (official cat, copy, New session),
+// the sections Working / Needs you / Done with one squircle card per session
+// (face 24, title, project + age, ledger bars, Open / Details / Close on the
+// selected card), a collapsed History fold, and the key legend. Progress is
 // ledger counts only. Every looping motion lives in the bar cell; here only
 // selection, hover and the card fold move, and `reduceMotion` reduces those
 // to opacity swaps.
@@ -18,8 +18,8 @@ Column {
   property var collector: null
   property int cursor: 0
   property bool historyOpen: false
-  // Why 열기 could not act, per session id; shown on that card until the
-  // panel reopens or a later 열기 succeeds. Reassigned whole so bindings
+  // Why Open could not act, per session id; shown on that card until the
+  // panel reopens or a later Open succeeds. Reassigned whole so bindings
   // re-evaluate.
   property var openNotices: ({})
 
@@ -32,6 +32,9 @@ Column {
   readonly property string sansFamily: Model.TOKENS.sansFamily
   readonly property bool reduceMotion: panel ? panel.reduceMotion : false
   readonly property double nowMs: panel ? panel.nowMs : 0
+  readonly property int cardPadding: Style.space(16)
+  readonly property int cardRadius: Style.space(14)
+  readonly property int detailLabelWidth: Style.space(76)
   readonly property var dismissed: panel ? panel.dismissed : ({})
   readonly property var summary: panel ? panel.summary : Model.aggregate([], 0, null)
   readonly property var sessions: collector ? collector.sessions : []
@@ -46,7 +49,7 @@ Column {
   readonly property int fontTitle: Style.font.title
   readonly property int fontFace: Style.fontPx(20 / 12)
 
-  // Sections never depend on the clock: a complete ledger is 완료 whenever it
+  // Sections never depend on the clock: a complete ledger is Done whenever it
   // was completed; the fresh done blink is the bar's.
   readonly property var grouped: Model.flattenSections(Model.groupSections(sessions, 0, dismissed))
   readonly property var mainRows: grouped.main
@@ -88,6 +91,67 @@ Column {
     return parts.join(" \u00b7 ")
   }
 
+  function valueOrNone(value) {
+    if (value === undefined || value === null) return "Not recorded"
+    var stringValue = String(value)
+    return stringValue === "" ? "Not recorded" : stringValue
+  }
+
+  function statusLabel(status) {
+    switch (String(status || "")) {
+    case "active": return "Working"
+    case "complete":
+    case "completed": return "Done"
+    case "blocked": return "Blocked"
+    case "failed": return "Failed"
+    case "in_progress": return "Working"
+    case "working": return "Working"
+    case "waiting": return "Needs you"
+    case "idle": return "Idle"
+    case "ended": return "Ended"
+    case "recent": return "Recent"
+    case "unknown": return "Unverified"
+    default: return valueOrNone(status)
+    }
+  }
+
+  function activityDetail(session) {
+    if (!session || session.activityAt === "") return "Not recorded"
+    var age = Model.ageLabel(session.activityMs, nowMs)
+    return age === "" ? session.activityAt : age + " \u00b7 " + session.activityAt
+  }
+
+  function runtimeDetail(session, state) {
+    if (!session || !session.runtime) return Model.stateLabelKo(state)
+    var parts = [Model.stateLabelKo(state)]
+    if (session.runtime.kind === "live") parts.push("Live process")
+    else if (session.runtime.kind === "idle") parts.push("Idle process")
+    else if (session.runtime.kind === "ended") parts.push("Ended")
+    else if (session.runtime.kind === "unknown") parts.push("Runtime unverified")
+    return parts.join(" \u00b7 ")
+  }
+
+  function todosDetail(session) {
+    if (!session || !session.todos) return "Not recorded"
+    return "Done " + session.todos.completed
+      + " \u00b7 In progress " + session.todos.inProgress
+      + " \u00b7 Pending " + session.todos.pending
+      + " \u00b7 Dropped " + session.todos.abandoned
+      + " \u00b7 Total " + session.todos.total
+  }
+
+  function goalDetail(session) {
+    return session && session.goal ? statusLabel(session.goal.status) : "Not recorded"
+  }
+
+  function ulwDetail(session) {
+    if (!session || !session.ulw) return "Not recorded"
+    var parts = []
+    if (session.ulw.total > 0) parts.push("Verified " + session.ulw.passed + "/" + session.ulw.total)
+    if (session.ulw.status !== "") parts.push(statusLabel(session.ulw.status))
+    return parts.length > 0 ? parts.join(" \u00b7 ") : "Not recorded"
+  }
+
   function reset() {
     cursor = 0
     historyOpen = false
@@ -99,7 +163,7 @@ Column {
     cursor = Model.clampIndex(selectedIndex + dy, visibleCount)
   }
 
-  // Tab: the first card of the next section; landing on 이전 기록 opens it.
+  // Tab: the first card of the next section; landing on History opens it.
   function jumpSection(direction) {
     var starts = []
     for (var i = 0; i < mainRows.length; i++) if (mainRows[i].first) starts.push(i)
@@ -123,7 +187,7 @@ Column {
     return panel ? panel.latestCwd() : ""
   }
 
-  // Enter, double-click and 열기 land here.
+  // Enter, double-click and Open land here.
   function activate() {
     if (selected) openSession(selected)
   }
@@ -173,45 +237,56 @@ Column {
     return n
   }
 
-  // ---------- header: text face, copy, meta, 새로 시작
+  // ---------- header: official cat, copy, meta, New session
   Item {
     id: header
     visible: !root.empty
     width: parent.width
-    implicitHeight: Math.max(headerText.implicitHeight, newButton.implicitHeight, headerFace.implicitHeight)
+    implicitHeight: Math.max(headerText.implicitHeight, newButton.implicitHeight, headerCat.implicitHeight) + root.cardPadding * 2
 
-    Text {
-      id: headerFace
-      textFormat: Text.PlainText
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: Model.textFace(root.face)
-      color: root.stale ? root.muted : root.toneFor(Model.accentFor(root.face), root.fg)
-      font.family: root.fontFamily
-      font.pixelSize: root.fontFace
-      font.weight: Font.Bold
-      renderType: Text.NativeRendering
+    Shape {
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
 
-      Behavior on color {
-        enabled: !root.reduceMotion
-        ColorAnimation { duration: 220 }
+      ShapePath {
+        strokeWidth: -1
+        fillColor: root.plate
+        PathSvg { path: Model.squirclePath(header.width, header.height, root.cardRadius) }
       }
+    }
+
+    Cat {
+      id: headerCat
+      anchors.left: parent.left
+      anchors.leftMargin: root.cardPadding
+      anchors.verticalCenter: parent.verticalCenter
+      size: Style.space(32)
+      inset: 0
+      face: root.face
+      glow: root.face === "ultrawork"
+      stale: root.stale
+      reduceMotion: true
+      foreground: root.ink
+      accent: Color.accent
+      attention: root.attention
+      failure: Color.urgent
+      fontFamily: root.fontFamily
     }
 
     Column {
       id: headerText
-      anchors.left: headerFace.right
-      anchors.leftMargin: Style.spacing.xl
+      anchors.left: headerCat.right
+      anchors.leftMargin: Style.spacing.lg
       anchors.right: newButton.left
-      anchors.rightMargin: Style.spacing.xl
+      anchors.rightMargin: Style.spacing.lg
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.spacing.xxs
 
       Text {
         textFormat: Text.PlainText
         width: parent.width
-        text: root.stale ? "세션 정보를 읽지 못했어요." : Model.copyFor(root.face)
-        color: root.fg
+        text: root.stale ? "Couldn't load sessions." : Model.copyFor(root.face)
+        color: root.ink
         font.family: root.sansFamily
         font.pixelSize: root.fontTitle
         font.weight: Font.Medium
@@ -224,7 +299,7 @@ Column {
         text: root.stale
           ? (root.collector ? root.collector.staleReason : "")
           : Model.summaryLine(root.summary).replace(/^OmO \u00b7 /, "")
-        color: root.muted
+        color: Util.alpha(root.ink, 0.66)
         font.family: root.fontFamily
         font.pixelSize: root.fontCaption
         elide: Text.ElideRight
@@ -234,8 +309,10 @@ Column {
     PlateButton {
       id: newButton
       anchors.right: parent.right
+      anchors.rightMargin: root.cardPadding
       anchors.verticalCenter: parent.verticalCenter
-      text: "새로 시작"
+      onPlate: true
+      text: "New session"
       onClicked: if (root.panel) root.panel.launch(root.selectedCwd())
     }
   }
@@ -245,7 +322,7 @@ Column {
     visible: root.partial && !root.stale && root.collector && root.collector.notice !== ""
     textFormat: Text.PlainText
     width: parent.width
-    text: "일부만 읽었어요 \u00b7 " + (root.collector ? root.collector.notice : "")
+    text: "Showing partial results \u00b7 " + (root.collector ? root.collector.notice : "")
     color: root.muted
     font.family: root.sansFamily
     font.pixelSize: root.fontCaption
@@ -282,7 +359,7 @@ Column {
     PlateButton {
       anchors.horizontalCenter: parent.horizontalCenter
       primary: true
-      text: "새로 시작"
+      text: "New session"
       onClicked: if (root.panel) root.panel.launch(root.panel.latestCwd())
     }
   }
@@ -308,7 +385,7 @@ Column {
       ShapePath {
         strokeWidth: -1
         fillColor: Style.selectedFillFor(root.fg, Color.accent)
-        PathSvg { path: Model.squirclePath(highlight.width, highlight.height) }
+        PathSvg { path: Model.squirclePath(highlight.width, highlight.height, root.cardRadius) }
       }
 
       Behavior on y {
@@ -327,7 +404,7 @@ Column {
         SessionCard {}
       }
 
-      // 이전 기록: ended and unverified sessions, folded until asked for.
+      // History: ended and unverified sessions, folded until asked for.
       Item {
         id: fold
         readonly property bool isCard: false
@@ -426,7 +503,7 @@ Column {
     visible: !root.empty
     textFormat: Text.PlainText
     width: parent.width
-    text: "\u2191\u2193 이동 \u00b7 \u23ce 열기 \u00b7 v 상세 \u00b7 n 새로 시작 \u00b7 d 닫기 \u00b7 tab 구역 \u00b7 \u2190\u2192 이전 기록 \u00b7 esc 패널 닫기"
+    text: "\u2191\u2193 Move \u00b7 \u23ce Open \u00b7 v Details \u00b7 n New session \u00b7 d Close \u00b7 tab Section \u00b7 \u2190\u2192 History \u00b7 esc Close panel"
     color: root.muted
     font.family: root.sansFamily
     font.pixelSize: root.fontCaption
@@ -441,6 +518,7 @@ Column {
     id: btn
     property string text: ""
     property bool primary: false
+    property bool onPlate: false
     signal clicked()
     readonly property bool hot: btnArea.containsMouse
 
@@ -455,10 +533,14 @@ Column {
 
       ShapePath {
         strokeWidth: btn.primary ? -1 : Style.spacing.hairline
-        strokeColor: Util.alpha(root.fg, btn.hot ? 0.7 : 0.4)
+        strokeColor: Util.alpha(btn.onPlate ? root.ink : root.fg, btn.hot ? 0.7 : 0.4)
         fillColor: btn.primary
           ? (btnArea.pressed ? Util.alpha(root.plate, 0.8) : (btn.hot ? root.plate : Util.alpha(root.plate, 0.92)))
-          : (btnArea.pressed ? Util.alpha(root.fg, 0.14) : (btn.hot ? Util.alpha(root.fg, 0.08) : Util.alpha(root.fg, 0)))
+          : (btnArea.pressed
+            ? Util.alpha(btn.onPlate ? root.ink : root.fg, 0.14)
+            : (btn.hot
+              ? Util.alpha(btn.onPlate ? root.ink : root.fg, 0.08)
+              : Util.alpha(btn.onPlate ? root.ink : root.fg, 0)))
         PathSvg { path: Model.squirclePath(btnPlate.width, btnPlate.height) }
 
         Behavior on fillColor {
@@ -473,7 +555,7 @@ Column {
       textFormat: Text.PlainText
       anchors.centerIn: parent
       text: btn.text
-      color: btn.primary ? root.ink : root.fg
+      color: btn.primary || btn.onPlate ? root.ink : root.fg
       font.family: root.sansFamily
       font.pixelSize: root.fontBody
       font.weight: Font.Medium
@@ -581,6 +663,47 @@ Column {
     }
   }
 
+  // One Korean key/value row. The value owns the remaining width and can
+  // break an unspaced UUID or path at any character without widening the card.
+  component DetailRow: Item {
+    id: detailRow
+    property string label: ""
+    property string value: ""
+    property bool monoValue: false
+
+    width: parent ? parent.width : 0
+    height: implicitHeight
+    implicitHeight: Math.max(detailLabel.implicitHeight, detailValue.implicitHeight)
+
+    Text {
+      id: detailLabel
+      textFormat: Text.PlainText
+      anchors.left: parent.left
+      anchors.top: parent.top
+      width: root.detailLabelWidth
+      text: detailRow.label
+      color: root.muted
+      font.family: root.sansFamily
+      font.pixelSize: root.fontCaption
+      font.weight: Font.Medium
+    }
+
+    Text {
+      id: detailValue
+      textFormat: Text.PlainText
+      anchors.left: detailLabel.right
+      anchors.leftMargin: Style.spacing.lg
+      anchors.right: parent.right
+      anchors.top: parent.top
+      text: detailRow.value
+      color: root.fg
+      font.family: detailRow.monoValue ? root.fontFamily : root.sansFamily
+      font.pixelSize: root.fontCaption
+      wrapMode: Text.Wrap
+      lineHeight: 1.25
+    }
+  }
+
   // One session: its section header when it opens a section, then the card.
   component SessionCard: Column {
     id: card
@@ -595,7 +718,7 @@ Column {
     readonly property bool inHistory: modelData.section === "history"
     readonly property bool isSelected: flatIndex === root.selectedIndex
     readonly property var ledger: Model.progress(session)
-    // 열기 only exists when it can act: focus a proven window or resume an
+    // Open only exists when it can act: focus a proven window or resume an
     // ended session. Otherwise the card says why.
     readonly property var plan: root.panel
       ? Model.openCommand(session, root.panel.openOptions)
@@ -608,6 +731,7 @@ Column {
     readonly property bool showsView: root.collector && root.collector.viewPath !== "" && root.collector.viewPath === session.sessionPath
       && (root.collector.viewing || root.collector.viewOutput !== "" || root.collector.viewError !== "")
     readonly property color tone: root.toneFor(Model.accentFor(face), root.muted)
+    property bool technicalOpen: false
     // Height once the fold has settled (only the selected card is open).
     readonly property real settledHeight: surface.height - expansion.height + (isSelected ? details.implicitHeight : 0)
 
@@ -623,7 +747,10 @@ Column {
       root.selectedBottom = root.selectedTop + settledHeight
     }
 
-    onIsSelectedChanged: syncHighlight()
+    onIsSelectedChanged: {
+      syncHighlight()
+      if (!isSelected) technicalOpen = false
+    }
     onYChanged: syncHighlight()
     onHeightChanged: syncHighlight()
     Component.onCompleted: syncHighlight()
@@ -675,7 +802,7 @@ Column {
     Item {
       id: surface
       width: parent.width
-      height: body.implicitHeight + Style.spacing.lg * 2
+      height: body.implicitHeight + root.cardPadding * 2
 
       // Rest and hover wash; the selection plate slides in from the list.
       Shape {
@@ -688,7 +815,7 @@ Column {
         ShapePath {
           strokeWidth: -1
           fillColor: cardArea.containsMouse ? Style.hoverFillFor(root.fg, Color.accent) : Style.normalFillFor(root.fg, Color.accent)
-          PathSvg { path: Model.squirclePath(wash.width, wash.height) }
+          PathSvg { path: Model.squirclePath(wash.width, wash.height, root.cardRadius) }
 
           Behavior on fillColor {
             enabled: !root.reduceMotion
@@ -719,7 +846,7 @@ Column {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: Style.spacing.lg
+        anchors.margins: root.cardPadding
         spacing: Style.spacing.sm
         opacity: card.inHistory ? 0.7 : 1
 
@@ -796,7 +923,7 @@ Column {
           ProgressLine {
             visible: !!card.ledger.todo
             width: ledgerBlock.width - ledgerBlock.leftPadding
-            label: "할 일"
+            label: "Todos"
             done: card.ledger.todo ? card.ledger.todo.completed : 0
             total: card.ledger.todo ? card.ledger.todo.total : 0
             ratio: card.ledger.todo ? card.ledger.todo.ratio : 0
@@ -806,7 +933,7 @@ Column {
           ProgressLine {
             visible: !!card.ledger.ulw
             width: ledgerBlock.width - ledgerBlock.leftPadding
-            label: "검증"
+            label: "Verified"
             done: card.ledger.ulw ? card.ledger.ulw.passed : 0
             total: card.ledger.ulw ? card.ledger.ulw.total : 0
             ratio: card.ledger.ulw ? card.ledger.ulw.ratio : 0
@@ -814,7 +941,7 @@ Column {
           }
         }
 
-        // Selected card only: why 열기 cannot act, the actions, the details.
+        // Selected card only: why Open cannot act, the actions, the details.
         Item {
           id: expansion
           width: parent.width
@@ -829,12 +956,9 @@ Column {
           Column {
             id: details
             width: parent.width
-            leftPadding: faceIcon.width + head.spacing
             topPadding: Style.spacing.xs
             spacing: Style.spacing.lg
             opacity: card.isSelected ? 1 : 0
-
-            readonly property real innerWidth: width - leftPadding
 
             Behavior on opacity {
               enabled: !root.reduceMotion
@@ -844,7 +968,7 @@ Column {
             Text {
               visible: text !== ""
               textFormat: Text.PlainText
-              width: details.innerWidth
+              width: parent.width
               text: card.notice
               color: Util.alpha(root.fg, 0.8)
               font.family: root.sansFamily
@@ -854,77 +978,117 @@ Column {
 
             Row {
               visible: card.hasActions
+              x: faceIcon.width + head.spacing
               spacing: Style.spacing.md
 
               PlateButton {
                 visible: card.canOpen
                 primary: true
-                text: "열기"
+                text: "Open"
                 onClicked: root.openSession(card.session)
               }
 
               PlateButton {
                 visible: card.session.sessionPath !== ""
-                text: "상세"
-                onClicked: root.viewSession(card.session)
+                text: card.technicalOpen ? "Hide details" : "Details"
+                onClicked: {
+                  card.technicalOpen = !card.technicalOpen
+                  if (card.technicalOpen) root.viewSession(card.session)
+                }
               }
 
               PlateButton {
                 visible: card.rowState === "error"
-                text: "닫기"
+                text: "Close"
                 onClicked: if (root.panel) root.panel.dismiss(card.session.id)
               }
             }
 
-            // Collector summary of the session file (id, title, directory,
-            // activity, runtime, ledgers) — not a transcript.
-            Item {
-              visible: card.showsView
-              width: details.innerWidth
-              implicitHeight: viewColumn.implicitHeight + Style.spacing.lg * 2
+            Column {
+              id: detailRows
+              width: parent.width
+              spacing: Style.spacing.sm
 
-              Shape {
-                id: viewPlate
-                anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-
-                ShapePath {
-                  strokeWidth: -1
-                  fillColor: Style.normalFillFor(root.fg, Color.accent)
-                  PathSvg { path: Model.squirclePath(viewPlate.width, viewPlate.height) }
-                }
+              DetailRow {
+                label: "Session"
+                value: root.valueOrNone(card.session.id)
+                monoValue: true
               }
 
-              Column {
-                id: viewColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: Style.spacing.lg
-                spacing: Style.spacing.xs
+              DetailRow {
+                label: "Title"
+                value: root.valueOrNone(card.session.title)
+              }
 
-                Text {
-                  textFormat: Text.PlainText
-                  text: "상세"
-                  color: root.muted
-                  font.family: root.sansFamily
-                  font.pixelSize: root.fontCaption
-                  font.weight: Font.Medium
-                }
+              DetailRow {
+                label: "Directory"
+                value: root.valueOrNone(card.session.cwd)
+                monoValue: true
+              }
 
-                Text {
-                  textFormat: Text.PlainText
-                  width: parent.width
-                  text: root.collector && root.collector.viewing
-                    ? "불러오는 중이에요\u2026"
-                    : (root.collector && root.collector.viewOutput !== ""
-                      ? root.collector.viewOutput
-                      : (root.collector && root.collector.viewError !== "" ? "상세 정보가 없어요." : ""))
-                  color: root.fg
-                  font.family: root.fontFamily
-                  font.pixelSize: root.fontCaption
-                  wrapMode: Text.WrapAnywhere
-                }
+              DetailRow {
+                label: "Last activity"
+                value: root.activityDetail(card.session)
+                monoValue: true
+              }
+
+              DetailRow {
+                label: "Runtime"
+                value: root.runtimeDetail(card.session, card.rowState)
+              }
+
+              DetailRow {
+                label: "Todos"
+                value: root.todosDetail(card.session)
+              }
+
+              DetailRow {
+                label: "Goal"
+                value: root.goalDetail(card.session)
+              }
+
+              DetailRow {
+                label: "Ultrawork"
+                value: root.ulwDetail(card.session)
+              }
+            }
+
+            // The collector's bounded technical summary stays available, but
+            // no longer replaces the readable session-object detail above.
+            Column {
+              id: technicalDetails
+              visible: card.technicalOpen && card.session.sessionPath !== ""
+              width: parent.width
+              spacing: Style.spacing.sm
+
+              Rectangle {
+                width: parent.width
+                height: Style.spacing.hairline
+                color: Util.alpha(root.fg, 0.12)
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: "Technical details"
+                color: root.muted
+                font.family: root.sansFamily
+                font.pixelSize: root.fontCaption
+                font.weight: Font.Medium
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                text: root.collector && root.collector.viewing
+                  ? "Loading\u2026"
+                  : (card.showsView && root.collector.viewOutput !== ""
+                    ? root.collector.viewOutput
+                    : (card.showsView && root.collector.viewError !== "" ? "No technical details available." : "Loading technical details\u2026"))
+                color: root.fg
+                font.family: root.fontFamily
+                font.pixelSize: root.fontCaption
+                wrapMode: Text.WrapAnywhere
+                lineHeight: 1.25
               }
             }
           }

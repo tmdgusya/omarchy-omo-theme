@@ -93,7 +93,7 @@ describe("parseList", () => {
     expect(s.sessionPath).toBe("")
     expect(s.cwd).toBe("")
     expect(s.focusAddress).toBe("")
-    expect(parsed({ title: "" }).title).toBe("\uc81c\ubaa9 \uc5c6\uc74c")
+    expect(parsed({ title: "" }).title).toBe("Untitled")
     expect(parsed({ focus: { address: "0x5601ab" } }).focusAddress).toBe("0x5601ab")
   })
 
@@ -452,11 +452,21 @@ describe("v3 faces and copy", () => {
     expect(Model.faceFor("ended", 4)).toBe("sleep")
   })
 
-  test("every face has a text form and one line of Korean copy", () => {
+  test("every face has a text form and one line of English copy", () => {
+    const expectedCopy = {
+      idle: "Tell OmO what you need.",
+      sleep: "Step away. We have this.",
+      working: "Working.",
+      ultrawork: "ultrawork \u00b7 until it is done",
+      waiting: "One decision needed.",
+      done: "Done. Ready for your review.",
+      error: "We hit a blocker.",
+    }
     const seen = new Set()
     for (const face of Model.FACES) {
       expect(Model.textFace(face)).not.toBe("")
-      expect(Model.copyFor(face)).toMatch(/\uc694\.$/)
+      expect(Model.copyFor(face)).toBe(expectedCopy[face])
+      expect(Model.copyFor(face)).not.toMatch(/[\r\n]/)
       seen.add(Model.copyFor(face))
     }
     expect(seen.size).toBe(Model.FACES.length)
@@ -495,31 +505,30 @@ describe("v3 faces and copy", () => {
     expect(Model.accentFor("sleep")).toBe("")
   })
 
-  test("Korean state labels cover every display state", () => {
+  test("English state labels cover every display state", () => {
     const labels = Model.STATES.map((state) => Model.stateLabelKo(state))
-    expect(labels.every((label) => label !== "")).toBe(true)
-    expect(new Set(labels).size).toBe(Model.STATES.length)
+    expect(labels).toEqual(["Needs you", "Needs you", "ultrawork", "Working", "Done", "Ready", "Recent", "Unverified", "History"])
     expect(Model.stateLabelKo("nonsense")).toBe(Model.stateLabelKo("unknown"))
   })
 
-  test("age labels are Korean and deterministic against a fixed now", () => {
-    expect(Model.ageLabel(NOW - 10 * 1000, NOW)).toBe("\ubc29\uae08")
-    expect(Model.ageLabel(NOW - 5 * 60 * 1000, NOW)).toBe("5\ubd84 \uc804")
-    expect(Model.ageLabel(NOW - 3 * 3600 * 1000, NOW)).toBe("3\uc2dc\uac04 \uc804")
-    expect(Model.ageLabel(NOW - 2 * 86400 * 1000, NOW)).toBe("2\uc77c \uc804")
+  test("age labels are English and deterministic against a fixed now", () => {
+    expect(Model.ageLabel(NOW - 10 * 1000, NOW)).toBe("just now")
+    expect(Model.ageLabel(NOW - 5 * 60 * 1000, NOW)).toBe("5 min ago")
+    expect(Model.ageLabel(NOW - 3 * 3600 * 1000, NOW)).toBe("3 h ago")
+    expect(Model.ageLabel(NOW - 2 * 86400 * 1000, NOW)).toBe("2 d ago")
     expect(Model.ageLabel(0, NOW)).toBe("")
   })
 
   test("open reasons are spoken in the panel's voice", () => {
-    expect(Model.reasonKo("running elsewhere")).toBe("\ub2e4\ub978 \ud130\ubbf8\ub110\uc5d0\uc11c \uc5f4\ub824 \uc788\uc5b4\uc694.")
-    expect(Model.reasonKo("invalid session path or agent directory")).toBe("\uc138\uc158 \ud30c\uc77c\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.")
-    expect(Model.reasonKo("")).toBe("\uc774 \uc138\uc158\uc740 \uc5f4 \uc218 \uc5c6\uc5b4\uc694.")
+    expect(Model.reasonKo("running elsewhere")).toBe("This session is open in another terminal.")
+    expect(Model.reasonKo("invalid session path or agent directory")).toBe("We couldn't find this session.")
+    expect(Model.reasonKo("")).toBe("This session can't be opened.")
     expect(Model.reasonKo("custom reason")).toBe("custom reason")
   })
 
   test("summary line counts by need and stays quiet when nothing runs", () => {
     const list = (items) => Model.parseList(listOutput(items)).sessions
-    expect(Model.summaryLine(Model.aggregate([], NOW, {}))).toBe("OmO \u00b7 \uc138\uc158 \uc5c6\uc74c")
+    expect(Model.summaryLine(Model.aggregate([], NOW, {}))).toBe("OmO \u00b7 no sessions")
     const busy = Model.aggregate(list([
       rawSession({ id: "a", runtime: working }),
       rawSession({ id: "b", runtime: working, ulw: { passed: 1, total: 3, status: "in_progress" } }),
@@ -527,9 +536,9 @@ describe("v3 faces and copy", () => {
       rawSession({ id: "d", runtime: idleProcess, goal: { status: "blocked" } }),
       rawSession({ id: "e", runtime: idleProcess, goal: { status: "complete" }, activityAt: secondsAgo(10) }),
     ]), NOW, {})
-    expect(Model.summaryLine(busy)).toBe("OmO \u00b7 \uc77c\ud558\ub294 \uc911 2 \u00b7 \uacb0\uc815 \ud544\uc694 2 \u00b7 \uc644\ub8cc 1")
+    expect(Model.summaryLine(busy)).toBe("OmO \u00b7 Working 2 \u00b7 Needs you 2 \u00b7 Done 1")
     const quiet = Model.aggregate(list([rawSession({ id: "q", runtime: idleProcess }), rawSession({ id: "r", runtime: ended })]), NOW, {})
-    expect(Model.summaryLine(quiet)).toBe("OmO \u00b7 \uc138\uc158 2 \u00b7 \uc26c\ub294 \uc911")
+    expect(Model.summaryLine(quiet)).toBe("OmO \u00b7 2 sessions \u00b7 resting")
   })
 
   test("squircle path draws four cubic corners inside the box at the icon ratio", () => {
@@ -564,7 +573,7 @@ describe("v3 sections", () => {
   test("groups by need, pins verified work first, and keeps collector order otherwise", () => {
     const sections = Model.groupSections(sessions, NOW, {})
     expect(sections.map((s) => s.key)).toEqual(["active", "decide", "done", "history"])
-    expect(sections.map((s) => s.title)).toEqual(["\uc9c4\ud589 \uc911", "\uacb0\uc815 \ud544\uc694", "\uc644\ub8cc", "\uc774\uc804 \uae30\ub85d"])
+    expect(sections.map((s) => s.title)).toEqual(["Working", "Needs you", "Done", "History"])
     const ids = (key) => sections.find((s) => s.key === key).rows.map((r) => r.session.id)
     expect(ids("active")).toEqual(["work", "ulw", "idle-plain", "recent"])
     expect(ids("decide")).toEqual(["ask", "blocked"])
@@ -593,9 +602,9 @@ describe("v3 sections", () => {
     const flat = Model.flattenSections(Model.groupSections(sessions, NOW, {}))
     expect(flat.main.map((r) => r.session.id)).toEqual(["work", "ulw", "idle-plain", "recent", "ask", "blocked", "fresh-done", "old-done"])
     expect(flat.main.map((r) => r.first)).toEqual([true, false, false, false, true, false, true, false])
-    expect(flat.main[4]).toMatchObject({ title: "\uacb0\uc815 \ud544\uc694", count: 2, section: "decide" })
+    expect(flat.main[4]).toMatchObject({ title: "Needs you", count: 2, section: "decide" })
     expect(flat.history.map((r) => r.session.id)).toEqual(["gone", "mystery"])
-    expect(flat.history[0]).toMatchObject({ first: true, count: 2, title: "\uc774\uc804 \uae30\ub85d" })
+    expect(flat.history[0]).toMatchObject({ first: true, count: 2, title: "History" })
     const empty = Model.flattenSections(Model.groupSections([], NOW, {}))
     expect(empty.main).toEqual([])
     expect(empty.history).toEqual([])

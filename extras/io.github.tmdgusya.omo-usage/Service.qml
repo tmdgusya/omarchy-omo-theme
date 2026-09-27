@@ -70,7 +70,7 @@ Item {
       if (parsed.ok) {
         root.snapshot = parsed.snapshot
         if (exitCode !== 0 || parsed.snapshot.error)
-          root.lastError = "사용량을 지금 불러올 수 없어요."
+          root.lastError = "Usage is unavailable right now."
       } else {
         root.lastError = parsed.error
       }

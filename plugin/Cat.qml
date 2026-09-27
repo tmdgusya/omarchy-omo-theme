@@ -275,6 +275,19 @@ Item {
       }
     }
 
+    Image {
+      visible: root.glow && root.live && root.framesShown
+      anchors.right: parent.right
+      anchors.top: parent.top
+      width: root.size * 0.55
+      height: root.size * 0.65
+      source: Qt.resolvedUrl("assets/omo-bolt-badge.svg")
+      sourceSize.width: Math.ceil(width * root.dpr)
+      sourceSize.height: Math.ceil(height * root.dpr)
+      fillMode: Image.PreserveAspectFit
+      z: 2
+    }
+
     // Reward and done-blink wash, clipped to the plate's squircle.
     Shape {
       id: flash

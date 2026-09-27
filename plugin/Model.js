@@ -212,7 +212,7 @@ function normalizeSession(item) {
   return {
     id: id,
     cwdLabel: text(s.cwdLabel, 64),
-    title: title === "" ? "\uc81c\ubaa9 \uc5c6\uc74c" : title,
+    title: title === "" ? "Untitled" : title,
     activityAt: activityAt,
     activityMs: activityMs > 0 ? activityMs : 0,
     runtime: normalizeRuntime(s.runtime),
@@ -475,7 +475,7 @@ function relativeTime(activityMs, nowMs) {
 // -------------------------------------------------------------- v3 faces
 //
 // The face vocabulary from docs/DESIGN-v3.md. A display state maps to one
-// face; each face has a text form (`OmO`, `-m-`, ...) and one line of Korean
+// face; each face has a text form (`OmO`, `-m-`, ...) and one line of English
 // copy. The bar earns a color only for working / waiting / error faces.
 
 var FACES = ["idle", "sleep", "working", "ultrawork", "waiting", "done", "error"]
@@ -526,13 +526,13 @@ function textFace(face) {
 
 function copyFor(face) {
   switch (face) {
-  case "sleep": return "\uc790\ub9ac \ube44\uc6b0\uc154\ub3c4 \ub3fc\uc694."
-  case "working": return "\uc77c\ud558\ub294 \uc911\uc774\uc5d0\uc694."
-  case "ultrawork": return "ultrawork \u00b7 \ub05d\ub0a0 \ub54c\uae4c\uc9c0 \uac00\uc694."
-  case "waiting": return "\uacb0\uc815 \ud558\ub098 \ud544\uc694\ud574\uc694."
-  case "done": return "\ub2e4 \ub410\uc5b4\uc694. \ud655\uc778\ub9cc \ud558\uc138\uc694."
-  case "error": return "\uc5ec\uae30\uc11c \ub9c9\ud614\uc5b4\uc694."
-  default: return "\ud560 \uc77c\uc744 \ub9d0\ud558\uc138\uc694."
+  case "sleep": return "Step away. We have this."
+  case "working": return "Working."
+  case "ultrawork": return "ultrawork \u00b7 until it is done"
+  case "waiting": return "One decision needed."
+  case "done": return "Done. Ready for your review."
+  case "error": return "We hit a blocker."
+  default: return "Tell OmO what you need."
   }
 }
 
@@ -555,25 +555,25 @@ function accentFor(face) {
 
 function stateLabelKo(state) {
   switch (state) {
-  case "error": return "\ub9c9\ud798"
-  case "waiting": return "\uacb0\uc815 \ud544\uc694"
+  case "error": return "Needs you"
+  case "waiting": return "Needs you"
   case "ultrawork": return "ultrawork"
-  case "working": return "\uc77c\ud558\ub294 \uc911"
-  case "success": return "\uc644\ub8cc"
-  case "ended": return "\uc885\ub8cc"
-  case "idle": return "\ub300\uae30"
-  case "recent": return "\ubc29\uae08 \ud65c\ub3d9"
-  default: return "\ud655\uc778 \uc548 \ub428"
+  case "working": return "Working"
+  case "success": return "Done"
+  case "ended": return "History"
+  case "idle": return "Ready"
+  case "recent": return "Recent"
+  default: return "Unverified"
   }
 }
 
 // ------------------------------------------------------------ v3 sections
 
 var SECTIONS = [
-  { key: "active", title: "\uc9c4\ud589 \uc911" },
-  { key: "decide", title: "\uacb0\uc815 \ud544\uc694" },
-  { key: "done", title: "\uc644\ub8cc" },
-  { key: "history", title: "\uc774\uc804 \uae30\ub85d" }
+  { key: "active", title: "Working" },
+  { key: "decide", title: "Needs you" },
+  { key: "done", title: "Done" },
+  { key: "history", title: "History" }
 ]
 
 // A ledger that says the work is finished, on any runtime.
@@ -584,9 +584,9 @@ function isComplete(session) {
   return goalStatus === "complete" || ulwStatus === "complete" || ulwStatus === "completed"
 }
 
-// 진행 중: verified work, recent activity, and live sessions waiting for the
-// next prompt. 결정 필요: a question or a block. 완료: a fresh done face, or
-// a live session whose ledger is complete. 이전 기록: ended and unverified.
+// Working: verified work, recent activity, and live sessions waiting for the
+// next prompt. Needs you: a question or a block. Done: a fresh done face, or
+// a live session whose ledger is complete. History: ended and unverified.
 function sectionOf(session, state) {
   switch (state) {
   case "error":
@@ -601,7 +601,7 @@ function sectionOf(session, state) {
 }
 
 // Every section in fixed order, each with its rows `{ session, state, face }`.
-// Verified-working rows lead 진행 중; otherwise collector order (newest first).
+// Verified-working rows lead Working; otherwise collector order (newest first).
 function groupSections(sessions, nowMs, dismissed) {
   var list = Array.isArray(sessions) ? sessions : []
   var rows = {}
@@ -623,7 +623,7 @@ function groupSections(sessions, nowMs, dismissed) {
   return out
 }
 
-// Rows in panel order: `main` is 진행 중 / 결정 필요 / 완료 back to back, each
+// Rows in panel order: `main` is Working / Needs you / Done back to back, each
 // section's first row carrying the header; `history` is the collapsed tail.
 function flattenSections(sections) {
   var list = Array.isArray(sections) ? sections : []
@@ -649,25 +649,25 @@ function flattenSections(sections) {
   return { main: main, history: history }
 }
 
-// Korean age for the card meta line; numbers stay digits for the mono font.
+// English age for the card meta line; numbers stay digits for the mono font.
 function ageLabel(activityMs, nowMs) {
   var at = number(activityMs, 0)
   var now = number(nowMs, 0)
   if (!(at > 0) || !(now > 0)) return ""
   var sec = Math.max(0, Math.round((now - at) / 1000))
-  if (sec < 60) return "\ubc29\uae08"
-  if (sec < 3600) return Math.round(sec / 60) + "\ubd84 \uc804"
-  if (sec < 86400) return Math.round(sec / 3600) + "\uc2dc\uac04 \uc804"
-  return Math.round(sec / 86400) + "\uc77c \uc804"
+  if (sec < 60) return "just now"
+  if (sec < 3600) return Math.round(sec / 60) + " min ago"
+  if (sec < 86400) return Math.round(sec / 3600) + " h ago"
+  return Math.round(sec / 86400) + " d ago"
 }
 
-// Why 열기 could not act, in the panel's voice.
+// Why Open could not act, in the panel's voice.
 function reasonKo(reason) {
   switch (String(reason || "")) {
-  case "running elsewhere": return "\ub2e4\ub978 \ud130\ubbf8\ub110\uc5d0\uc11c \uc5f4\ub824 \uc788\uc5b4\uc694."
-  case "invalid session path or agent directory": return "\uc138\uc158 \ud30c\uc77c\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694."
-  case "invalid launcher": return "\uc2e4\ud589 \ud30c\uc77c \uc124\uc815\uc744 \ud655\uc778\ud558\uc138\uc694."
-  case "": return "\uc774 \uc138\uc158\uc740 \uc5f4 \uc218 \uc5c6\uc5b4\uc694."
+  case "running elsewhere": return "This session is open in another terminal."
+  case "invalid session path or agent directory": return "We couldn't find this session."
+  case "invalid launcher": return "Check the launcher path."
+  case "": return "This session can't be opened."
   default: return String(reason)
   }
 }
@@ -677,14 +677,14 @@ function summaryLine(summary) {
   var s = record(summary)
   var counts = record(s.counts)
   var total = count(s.total)
-  if (total === 0) return "OmO \u00b7 \uc138\uc158 \uc5c6\uc74c"
+  if (total === 0) return "OmO \u00b7 no sessions"
   var segments = []
   var working = count(counts.working) + count(counts.ultrawork)
   var decide = count(counts.waiting) + count(counts.error)
-  if (working > 0) segments.push("\uc77c\ud558\ub294 \uc911 " + working)
-  if (decide > 0) segments.push("\uacb0\uc815 \ud544\uc694 " + decide)
-  if (count(counts.success) > 0) segments.push("\uc644\ub8cc " + count(counts.success))
-  if (segments.length === 0) return "OmO \u00b7 \uc138\uc158 " + total + " \u00b7 \uc26c\ub294 \uc911"
+  if (working > 0) segments.push("Working " + working)
+  if (decide > 0) segments.push("Needs you " + decide)
+  if (count(counts.success) > 0) segments.push("Done " + count(counts.success))
+  if (segments.length === 0) return "OmO \u00b7 " + total + (total === 1 ? " session" : " sessions") + " \u00b7 resting"
   return "OmO \u00b7 " + segments.join(" \u00b7 ")
 }
 

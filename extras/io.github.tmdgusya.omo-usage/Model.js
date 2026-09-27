@@ -8,7 +8,7 @@ function parseSnapshot(text) {
   try {
     var raw = JSON.parse(String(text || ""))
     if (raw.schemaVersion !== 1 || !Array.isArray(raw.providers))
-      return { ok: false, error: "사용량 형식을 읽을 수 없어요." }
+      return { ok: false, error: "We couldn't read the usage format." }
     return {
       ok: true,
       snapshot: {
@@ -18,7 +18,7 @@ function parseSnapshot(text) {
       }
     }
   } catch (error) {
-    return { ok: false, error: "사용량 응답을 읽을 수 없어요." }
+    return { ok: false, error: "We couldn't read the usage response." }
   }
 }
 
@@ -50,14 +50,14 @@ function percent(value) {
 
 function countdown(resetAtMs, nowMs) {
   var remaining = Number(resetAtMs) - Number(nowMs)
-  if (!isFinite(remaining) || remaining <= 0) return "곧 초기화"
+  if (!isFinite(remaining) || remaining <= 0) return "Resetting soon"
   var minutes = Math.floor(remaining / 60000)
   var days = Math.floor(minutes / 1440)
   var hours = Math.floor((minutes % 1440) / 60)
   var mins = minutes % 60
-  if (days > 0) return days + "일 " + hours + "시간"
-  if (hours > 0) return hours + "시간 " + mins + "분"
-  return mins + "분"
+  if (days > 0) return days + "d " + hours + "h"
+  if (hours > 0) return hours + "h " + mins + "m"
+  return mins + "m"
 }
 
 function tokenCount(value) {
@@ -70,17 +70,20 @@ function tokenCount(value) {
 
 function accountText(provider) {
   var accounts = provider && provider.accounts ? provider.accounts : {}
-  var text = (Number(accounts.total) || 0) + "개 계정"
-  if ((Number(accounts.blocked) || 0) > 0) text += " · " + accounts.blocked + "개 대기"
+  var total = Number(accounts.total) || 0
+  var text = total + (total === 1 ? " account" : " accounts")
+  if ((Number(accounts.blocked) || 0) > 0) text += " \u00b7 " + accounts.blocked + " blocked"
   return text
 }
 
 function quotaUnavailableText(provider) {
   var reason = provider && provider.quota ? provider.quota.reason : ""
-  if (reason === "unsupported") return "공급자 쿼터를 제공하지 않아요."
-  if (reason === "all_accounts_blocked") return "사용 가능한 계정이 없어요."
-  if (reason === "auth_unavailable") return "인증을 다시 확인해 주세요."
-  return "쿼터를 지금 확인할 수 없어요."
+  if (reason === "unsupported") return "This provider does not report quota."
+  if (reason === "all_accounts_blocked") return "No accounts are available."
+  if (reason === "auth_unavailable") return "Check provider authentication."
+  if (reason === "backend_unavailable") return "Quota is unavailable from this provider right now."
+  if (reason === "rate_limited") return "Quota lookup is rate-limited. Try again later."
+  return "Quota is unavailable right now."
 }
 
 var exportsObject = {

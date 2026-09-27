@@ -25,13 +25,13 @@ var MAX_TRACKED = 12        // Model.MAX_SESSIONS; memory never grows past the l
 // `keep`: the Model states in which the card is still true; in any other
 // state it is stale. A finished turn has no face-table row and reads as done.
 var EVENTS = {
-  waiting: { face: "waiting", urgency: "normal", timeoutMs: 12000, headline: "OmO? 결정 하나 필요해요", keep: ["waiting"] },
-  finished: { face: "done", urgency: "low", timeoutMs: 5000, headline: "^m^ 다 됐어요. 확인만 하세요", keep: ["idle", "success"] },
-  complete: { face: "done", urgency: "normal", timeoutMs: 8000, headline: "^m^ 다 됐어요. 확인만 하세요", keep: ["success", "idle"] },
-  error: { face: "error", urgency: "critical", timeoutMs: 0, headline: ">m< 여기서 막혔어요", keep: ["error"] }
+  waiting: { face: "waiting", urgency: "normal", timeoutMs: 12000, headline: "OmO? One decision needed.", keep: ["waiting"] },
+  finished: { face: "done", urgency: "low", timeoutMs: 5000, headline: "^m^ Done. Ready for your review.", keep: ["idle", "success"] },
+  complete: { face: "done", urgency: "normal", timeoutMs: 8000, headline: "^m^ Done. Ready for your review.", keep: ["success", "idle"] },
+  error: { face: "error", urgency: "critical", timeoutMs: 0, headline: ">m< We hit a blocker.", keep: ["error"] }
 }
 
-var UNTITLED = "제목 없음"
+var UNTITLED = "Untitled"
 
 // The stock notification server takes a card off the screen only by summary
 // substring (omarchy-notification-dismiss -> `notifications dismiss`); a D-Bus

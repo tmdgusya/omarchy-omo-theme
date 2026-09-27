@@ -43,15 +43,15 @@ Rest state is two-tone (plate + ink). A color appears only when a state earns it
 Graphic faces are the official silhouette with inner monoline kept; only eyes
 and mouth change. Every frame, including running frames, keeps ring eyes.
 
-| State | Text face | Graphic eyes / mouth | Korean copy | Accent |
+| State | Text face | Graphic eyes / mouth | English copy | Accent |
 |---|---|---|---|---|
-| idle (sessions exist, none running) | `OmO` | rings / m | 할 일을 말하세요. | none |
-| sleep (zero sessions) | `-m-` | closed lines / m | 자리 비우셔도 돼요. | none |
-| working | `OmO` | rings / m, run cycle | 일하는 중이에요. | aqua |
-| ultrawork (verified) | `OmO⚡` | rings / m + bolt at ear | ultrawork · 끝날 때까지 가요. | aqua |
-| waiting | `OmO?` | rings looking up / small o | 결정 하나 필요해요. | amber |
-| done | `^m^` | arcs / m | 다 됐어요. 확인만 하세요. | none (one aqua blink) |
-| error | `>m<` | chevrons / m | 여기서 막혔어요. | coral |
+| idle (sessions exist, none running) | `OmO` | rings / m | Tell OmO what you need. | none |
+| sleep (zero sessions) | `-m-` | closed lines / m | Step away. We have this. | none |
+| working | `OmO` | rings / m, run cycle | Working. | aqua |
+| ultrawork (verified) | `OmO⚡` | rings / m + bolt at ear | ultrawork · until it is done | aqua |
+| waiting | `OmO?` | rings looking up / small o | One decision needed. | amber |
+| done | `^m^` | arcs / m | Done. Ready for your review. | none (one aqua blink) |
+| error | `>m<` | chevrons / m | We hit a blocker. | coral |
 
 Face asset contract (produced by the art lane, consumed by bar/panel/notify/lock):
 `plugin/assets/face/omo-face-{idle,sleep,working,ultrawork,waiting,done,error}.svg`
@@ -62,13 +62,13 @@ transparent, viewBox 0 0 64 64). Must stay legible at 20 logical px
 
 ## Voice
 
-Korean 해요체, short, dry, no exclamation marks. English only in identifiers.
-Numbers are mono. Actions: 열기, 상세, 새로 시작, 닫기.
+Natural English, short, calm, and direct; no exclamation marks.
+Numbers are mono. Actions: Open, Details, New session, Close.
 
 ## Typography
 
 - Mono (`bar.fontFamily`, JetBrainsMono Nerd Font) for faces, counts, time.
-- Sans `"Noto Sans CJK KR"` for Korean copy.
+- Sans `"Noto Sans CJK KR"` for interface copy.
 - Sizes: 11 / 12 / 14 / 20 logical px only. Weights: 400 / 500 / 700.
 
 ## Motion
@@ -86,24 +86,24 @@ Numbers are mono. Actions: 열기, 상세, 새로 시작, 닫기.
 - Top preset (default): bar height 32 logical px. Left preset: width 36.
 - 4 px grid; icon box 20 px; cell inset 6 px; hover plate = squircle ink-on-backdrop at 10% plate.
 - Left section: OmO menu button (squircle plate face) · ring workspaces · cat cell.
-- Center: OmO clock (`HH:mm` mono + small Korean weekday, e.g. `15:57 일`).
+- Center: OmO clock (`HH:mm` mono + small English weekday, e.g. `15:57 Sun`).
 - Right: tray (pinned 2 + overflow ring) · system widgets.
 - Cat cell: face 20 px + count (mono 12). Top preset may add one line of copy
   from the face table when a session is working/waiting/error.
 
 ## Session panel
 
-Three sections: 진행 중 / 결정 필요 / 완료 (plus collapsed 이전 기록).
+Three sections: Working / Needs you / Done (plus collapsed History).
 One card per session: face 24 px, title (sans), project + age (muted mono),
 progress = todo and verified-criteria counts (never guessed). Primary action
-열기 (focus existing window, or resume ended), secondary 상세. Header button
-새로 시작. Empty state: sleep face + "할 일을 말하세요." + 새로 시작 button.
+Open (focus existing window, or resume ended), secondary Details. Header button
+New session. Empty state: sleep face + "Tell OmO what you need." + New session button.
 No fake/disabled buttons.
 
 ## Launcher (SUPER+ALT+O)
 
 One-line input overlay, centered, squircle plate card: face + placeholder
-"할 일을 말하세요." Enter with text runs `omo "<text>"` (argument passed as one
+"What would you like done?" Enter with text runs `omo "<text>"` (argument passed as one
 argv element, never shell-interpolated) in Ghostty; Enter empty runs `omo`;
 Escape closes. Keybinding is installed by default by an owned, reversible
 installer into `~/.config/hypr/bindings.lua`.
