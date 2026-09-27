@@ -6,12 +6,23 @@ default** and nothing here loads until you copy the files and enable the
 plugin yourself.
 
 The default Omarchy lock stays the stock `LockView`; the theme's `[lock]`
-tokens in `shell.toml` (Nightsea background, aqua-to-plate active border,
-error red) already style it. This Explorer design adds the layout the stock
-view cannot do: the moon cat at 28 % / x 28 %, a clock column on the right,
-the password field floating 7 % above the lower edge, a whole-scene shake on
-a wrong password, and the 400 ms `rise` unlock. All colours come from the
-shell's `Color.lock.*` and `Style.*` tokens, so it follows theme changes.
+tokens in `shell.toml` style it. This Explorer design is the DESIGN-v3 sleep
+state, which the stock view cannot draw:
+
+- the `-m-` sleep face (closed-line eyes, `m` mouth) on its plate squircle,
+  centred, 128 px;
+- the face table's line **자리 비우셔도 돼요.** (Noto Sans CJK KR, 20 px);
+- the time as `HH:mm` plus the Korean weekday (`17:25 일`, mono 14 px);
+- a 1 px monoline squircle password field (`비밀번호`) and a 12 px hint:
+  `Enter를 누르면 열려요.`, `센서를 터치하거나 Enter를 누르세요.` with a
+  fingerprint reader, `N번 틀렸어요.` after a wrong password.
+
+Nothing loops: a locked screen is the sleep state, so the face stays still and
+the lock idles at 0 fps. The only motion is the host's scene shake on a wrong
+password and its unlock transition. All colours come from the shell's
+`Color.lock.*` tokens and all sizes from `Style.*`, so it follows theme
+changes. Strings the host draws itself (PAM messages, `Checking…`, the power
+buttons) stay the Explorer's.
 
 > **Why opt-in:** lock-explorer was one of the suspects in the 2026-09-25
 > 43 GB `omarchy-shell` memory incident and is disabled in `shell.json`.
@@ -22,15 +33,16 @@ shell's `Color.lock.*` and `Style.*` tokens, so it follows theme changes.
 ## Files
 
 ```
-lock/OmO.qml                          the design (Explorer user-design API)
-lock/omo-lock-assets/omo-cat-idle.svg   moon cat, ring eyes + m mouth
-lock/omo-lock-assets/omo-cat-blink.svg  blink frame (closed eyes)
+lock/OmO.qml                             the design (Explorer user-design API)
+lock/omo-lock-assets/omo-face-sleep.svg  sleep face on its plate squircle
 ```
 
-The SVGs are the exact OmO face paths (identical to
-`plugin/assets/omo-cat-{idle,blink}.svg`), derived from the oh-my-openagent
-OmO icon, and retain the upstream Sustainable Use License 1.0 — see
-`LICENSE`. They are not covered by the plugin code's MIT grant.
+`omo-face-sleep.svg` is a copy of `plugin/assets/face/omo-face-sleep.svg`
+(the DESIGN-v3 face asset); the design is copied out of the repository on
+install, so it carries its own copy. Keep the two identical. The face is
+derived from the oh-my-openagent OmO icon and retains the upstream
+Sustainable Use License 1.0 — see `LICENSE`. It is not covered by the plugin
+code's MIT grant.
 
 ## Enable (manual, reversible)
 
@@ -45,14 +57,14 @@ omarchy plugin enable io.github.sirjul1337.lock-explorer
 omarchy-shell lock rescanDesigns
 omarchy-shell lock setDesign my-omo          # OmO.qml scans in as "my-omo"
 omarchy-shell lock setUnlockAnimation rise   # fade | zoom | rise | none
-omarchy-shell lock setUnlockDuration 400     # ms
+omarchy-shell lock setUnlockDuration 400     # ms, what scripts/install-lock.sh applies
 ```
 
 Preview without locking:
 
 ```sh
 omarchy-shell lock previewDesign my-omo
-omarchy-shell lock previewUnlock             # exercises the 400 ms rise
+omarchy-shell lock previewUnlock             # exercises the unlock transition
 ```
 
 Notes:
@@ -60,9 +72,8 @@ Notes:
 - The design renders on every output. If you restrict Explorer to one input
   monitor, Explorer pins its built-in `companion` design on the others; keep
   the input monitor at `all` for a total look.
-- The cat only breathes (1.5 %) and blinks while the display is lit; it says
-  nothing about session state. A lock screen has no trustworthy signal, and
-  the cat never lies.
+- The face says nothing about session state. A lock screen has no
+  trustworthy signal, and the cat never lies: it only sleeps.
 - The boot-splash `unlock.png` / `preview-unlock.png` in the theme root are
   Plymouth assets consumed by `omarchy-plymouth-set-by-theme` (needs sudo) —
   unrelated to this design and never touched by it.

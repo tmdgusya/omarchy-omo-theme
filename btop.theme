@@ -1,0 +1,106 @@
+# OmO Nightsea - btop, on the DESIGN-v3 tokens.
+# Rest is two-tone: plate text on the backdrop, muted chrome, one hairline
+# color for every box (no per-box rainbow). A color appears only where btop
+# has a state that earns it: aqua = work (cpu load), amber = attention
+# (a paused process list waits for you), coral = trouble (hot sensors).
+# Mid stops stay neutral: btop puts the mid color at 50 % of the scale, and
+# a 55 °C core or half-used memory is not a warning.
+#
+#   plate #F4F4F4   ink #041617   backdrop #0B1B1D / #071416   muted #5F7A7B
+#   aqua  #7FE0D4   amber #F2D38B   coral #F08A8A
+#   #223133 = plate 10% over backdrop (the v3 hover/selected plate)
+#   #AAB7B8 = midpoint of muted and plate (keeps two-stop ramps straight)
+
+# Main background, empty for terminal default, need to be empty if you want transparent background
+theme[main_bg]="#0B1B1D"
+
+# Main text color
+theme[main_fg]="#F4F4F4"
+
+# Title color for boxes
+theme[title]="#F4F4F4"
+
+# Highlight color for keyboard shortcuts (secondary, like a menu shortcut)
+theme[hi_fg]="#AAB7B8"
+
+# Background color of selected item in processes box
+theme[selected_bg]="#223133"
+
+# Foreground color of selected item in processes box
+theme[selected_fg]="#F4F4F4"
+
+# Color of inactive/disabled text
+theme[inactive_fg]="#5F7A7B"
+
+# Color of text appearing on top of graphs, i.e uptime and current network graph scaling
+theme[graph_text]="#AAB7B8"
+
+# Background color of the percentage meters (a recessed track)
+theme[meter_bg]="#071416"
+
+# Misc colors for processes box including mini cpu graphs, details memory graph and details status text
+theme[proc_misc]="#AAB7B8"
+
+# CPU, Memory, Network, Proc box outline colors: one monoline for all four
+theme[cpu_box]="#5F7A7B"
+theme[mem_box]="#5F7A7B"
+theme[net_box]="#5F7A7B"
+theme[proc_box]="#5F7A7B"
+
+# Box divider line and small boxes line color
+theme[div_line]="#5F7A7B"
+
+# Temperature graph color (calm -> trouble only near the top)
+theme[temp_start]="#5F7A7B"
+theme[temp_mid]="#AAB7B8"
+theme[temp_end]="#F08A8A"
+
+# CPU graph colors (idle -> working -> saturated)
+theme[cpu_start]="#5F7A7B"
+theme[cpu_mid]="#7FE0D4"
+theme[cpu_end]="#F4F4F4"
+
+# Mem/Disk free meter
+theme[free_start]="#5F7A7B"
+theme[free_mid]="#AAB7B8"
+theme[free_end]="#F4F4F4"
+
+# Mem/Disk cached meter
+theme[cached_start]="#5F7A7B"
+theme[cached_mid]="#AAB7B8"
+theme[cached_end]="#F4F4F4"
+
+# Mem/Disk available meter
+theme[available_start]="#5F7A7B"
+theme[available_mid]="#AAB7B8"
+theme[available_end]="#F4F4F4"
+
+# Mem/Disk used meter
+theme[used_start]="#5F7A7B"
+theme[used_mid]="#AAB7B8"
+theme[used_end]="#F4F4F4"
+
+# Download graph colors
+theme[download_start]="#5F7A7B"
+theme[download_mid]="#AAB7B8"
+theme[download_end]="#F4F4F4"
+
+# Upload graph colors
+theme[upload_start]="#5F7A7B"
+theme[upload_mid]="#AAB7B8"
+theme[upload_end]="#F4F4F4"
+
+# Process box color gradient for threads, mem and cpu usage
+theme[process_start]="#5F7A7B"
+theme[process_mid]="#7FE0D4"
+theme[process_end]="#F4F4F4"
+
+# Process list paused / following banners: a plate chip with ink text, the icon look
+theme[proc_banner_bg]="#F4F4F4"
+theme[proc_banner_fg]="#041617"
+theme[proc_pause_bg]="#F2D38B"
+theme[proc_follow_bg]="#F4F4F4"
+
+# The followed process row
+theme[followed_bg]="#223133"
+theme[followed_fg]="#F4F4F4"
