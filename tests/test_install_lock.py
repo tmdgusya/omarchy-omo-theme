@@ -128,7 +128,7 @@ class LockInstallerTests(unittest.TestCase):
         entry = next(item for item in active["plugins"] if item["id"] == LOCK_ID)
         self.assertEqual(
             {key: entry[key] for key in ("design", "unlock", "unlockMs")},
-            {"design": "my-omo", "unlock": "rise", "unlockMs": 400},
+            {"design": "my-omo", "unlock": "rise", "unlockMs": 280},
         )
         removed = self.run_script("uninstall-lock.sh")
         # Then the exact prior plugin state and unrelated config return.

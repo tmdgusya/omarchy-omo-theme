@@ -3,11 +3,12 @@ Original code: MIT License
 
 Copyright (c) 2026 tmdgusya
 
-The original code in plugin/, scripts/, tests/, art/build-wallpapers.mjs,
+The original code in plugin/, scripts/, tests/, art/build-*.mjs,
 and the theme configuration files is licensed under the MIT License below.
 This grant excludes the upstream OmO icon and artwork derived from it.
 The reference icon, art/omo-cat-moon.svg, art/wallpaper-*.svg,
-art/layers/*.png, backgrounds/*.png, plugin/assets/omo-cat-*.svg, and
+art/layers/*.png, backgrounds/*.png, plugin/assets/omo-cat-*.svg,
+plugin/assets/face/*.svg, plugin/launcher/omo-face.svg, and
 lock/omo-lock-assets/*.svg retain the upstream Sustainable Use License
 reproduced below. These derivatives modify the original icon's colors,
 composition, or expression; they are not upstream official assets.

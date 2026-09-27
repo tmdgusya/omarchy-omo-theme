@@ -86,7 +86,7 @@ trap 'rm -f -- "$temporary"' EXIT
 jq -n --argjson previous "$previous" --argjson disabled "$prior_disabled" \
   --argjson owned "$settings_owned" --argjson files "$files" \
   '{schema:1,id:"omo-lock",priorDisabled:$disabled,previous:$previous,
-    applied:{design:"my-omo",unlock:"rise",unlockMs:400},
+    applied:{design:"my-omo",unlock:"rise",unlockMs:280},
     settingsOwned:$owned,files:$files}' >"$temporary"
 chmod 600 "$temporary"
 mv -f -- "$temporary" "$marker"
@@ -99,6 +99,6 @@ if [[ "$settings_owned" == true ]]; then
   omarchy-shell lock rescanDesigns
   omarchy-shell lock setDesign my-omo
   omarchy-shell lock setUnlockAnimation rise
-  omarchy-shell lock setUnlockDuration 400
+  omarchy-shell lock setUnlockDuration 280
 fi
 printf 'Installed opt-in OmO lock design\n'

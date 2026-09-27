@@ -57,7 +57,7 @@ omarchy plugin enable io.github.sirjul1337.lock-explorer
 omarchy-shell lock rescanDesigns
 omarchy-shell lock setDesign my-omo          # OmO.qml scans in as "my-omo"
 omarchy-shell lock setUnlockAnimation rise   # fade | zoom | rise | none
-omarchy-shell lock setUnlockDuration 400     # ms, what scripts/install-lock.sh applies
+omarchy-shell lock setUnlockDuration 280     # ms, what scripts/install-lock.sh applies
 ```
 
 Preview without locking:
