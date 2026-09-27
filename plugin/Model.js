@@ -212,7 +212,7 @@ function normalizeSession(item) {
   return {
     id: id,
     cwdLabel: text(s.cwdLabel, 64),
-    title: title === "" ? "Untitled" : title,
+    title: title === "" ? "\uc81c\ubaa9 \uc5c6\uc74c" : title,
     activityAt: activityAt,
     activityMs: activityMs > 0 ? activityMs : 0,
     runtime: normalizeRuntime(s.runtime),
@@ -472,6 +472,247 @@ function relativeTime(activityMs, nowMs) {
   return Math.round(sec / 86400) + " d ago"
 }
 
+// -------------------------------------------------------------- v3 faces
+//
+// The face vocabulary from docs/DESIGN-v3.md. A display state maps to one
+// face; each face has a text form (`OmO`, `-m-`, ...) and one line of Korean
+// copy. The bar earns a color only for working / waiting / error faces.
+
+var FACES = ["idle", "sleep", "working", "ultrawork", "waiting", "done", "error"]
+
+// Brand constants from the icon that the shell's Color singleton does not
+// expose (it only reads foreground/background/accent/muted/red). The state
+// accents themselves come from the shell tokens (Color.accent, Color.bar.active,
+// Color.urgent) so the widget follows the theme.
+var TOKENS = {
+  plate: "#F4F4F4",
+  ink: "#041617",
+  // colors.toml `dark_foreground`; Color.qml does not read that key.
+  muted: "#5F7A7B",
+  sansFamily: "Noto Sans CJK KR"
+}
+
+// The bar badge counts sessions that need eyes: live or recent ones plus
+// blocked ones (an error on a live runtime leaves `active`).
+function badgeCount(summary) {
+  var s = record(summary)
+  return count(s.active) + count(record(s.counts).error)
+}
+
+// `total` is how many sessions the face stands for: with none listed the cat
+// sleeps; an ended session sleeps too (nothing of it is alive).
+function faceFor(state, total) {
+  switch (state) {
+  case "error": return "error"
+  case "waiting": return "waiting"
+  case "ultrawork": return "ultrawork"
+  case "working": return "working"
+  case "success": return "done"
+  case "ended": return "sleep"
+  default: return count(total) > 0 ? "idle" : "sleep"
+  }
+}
+
+function textFace(face) {
+  switch (face) {
+  case "sleep": return "-m-"
+  case "ultrawork": return "OmO\u26a1"
+  case "waiting": return "OmO?"
+  case "done": return "^m^"
+  case "error": return ">m<"
+  default: return "OmO"
+  }
+}
+
+function copyFor(face) {
+  switch (face) {
+  case "sleep": return "\uc790\ub9ac \ube44\uc6b0\uc154\ub3c4 \ub3fc\uc694."
+  case "working": return "\uc77c\ud558\ub294 \uc911\uc774\uc5d0\uc694."
+  case "ultrawork": return "ultrawork \u00b7 \ub05d\ub0a0 \ub54c\uae4c\uc9c0 \uac00\uc694."
+  case "waiting": return "\uacb0\uc815 \ud558\ub098 \ud544\uc694\ud574\uc694."
+  case "done": return "\ub2e4 \ub410\uc5b4\uc694. \ud655\uc778\ub9cc \ud558\uc138\uc694."
+  case "error": return "\uc5ec\uae30\uc11c \ub9c9\ud614\uc5b4\uc694."
+  default: return "\ud560 \uc77c\uc744 \ub9d0\ud558\uc138\uc694."
+  }
+}
+
+// The top bar adds one line of copy only while a session needs eyes.
+function barCopy(face) {
+  return face === "working" || face === "ultrawork" || face === "waiting" || face === "error" ? copyFor(face) : ""
+}
+
+// Which accent a face earns: aqua only for verified work, amber only for a
+// human decision, coral only for a failure. Rest faces are two-tone.
+function accentFor(face) {
+  switch (face) {
+  case "working":
+  case "ultrawork": return "aqua"
+  case "waiting": return "amber"
+  case "error": return "coral"
+  default: return ""
+  }
+}
+
+function stateLabelKo(state) {
+  switch (state) {
+  case "error": return "\ub9c9\ud798"
+  case "waiting": return "\uacb0\uc815 \ud544\uc694"
+  case "ultrawork": return "ultrawork"
+  case "working": return "\uc77c\ud558\ub294 \uc911"
+  case "success": return "\uc644\ub8cc"
+  case "ended": return "\uc885\ub8cc"
+  case "idle": return "\ub300\uae30"
+  case "recent": return "\ubc29\uae08 \ud65c\ub3d9"
+  default: return "\ud655\uc778 \uc548 \ub428"
+  }
+}
+
+// ------------------------------------------------------------ v3 sections
+
+var SECTIONS = [
+  { key: "active", title: "\uc9c4\ud589 \uc911" },
+  { key: "decide", title: "\uacb0\uc815 \ud544\uc694" },
+  { key: "done", title: "\uc644\ub8cc" },
+  { key: "history", title: "\uc774\uc804 \uae30\ub85d" }
+]
+
+// A ledger that says the work is finished, on any runtime.
+function isComplete(session) {
+  var s = record(session)
+  var goalStatus = s.goal ? String(s.goal.status || "") : ""
+  var ulwStatus = s.ulw ? String(s.ulw.status || "") : ""
+  return goalStatus === "complete" || ulwStatus === "complete" || ulwStatus === "completed"
+}
+
+// 진행 중: verified work, recent activity, and live sessions waiting for the
+// next prompt. 결정 필요: a question or a block. 완료: a fresh done face, or
+// a live session whose ledger is complete. 이전 기록: ended and unverified.
+function sectionOf(session, state) {
+  switch (state) {
+  case "error":
+  case "waiting": return "decide"
+  case "working":
+  case "ultrawork":
+  case "recent": return "active"
+  case "success": return "done"
+  case "idle": return isComplete(session) ? "done" : "active"
+  default: return "history"
+  }
+}
+
+// Every section in fixed order, each with its rows `{ session, state, face }`.
+// Verified-working rows lead 진행 중; otherwise collector order (newest first).
+function groupSections(sessions, nowMs, dismissed) {
+  var list = Array.isArray(sessions) ? sessions : []
+  var rows = {}
+  for (var k = 0; k < SECTIONS.length; k++) rows[SECTIONS[k].key] = []
+  var running = []
+  for (var i = 0; i < list.length; i++) {
+    var state = effectiveState(list[i], nowMs, dismissed)
+    var section = sectionOf(list[i], state)
+    var face = section === "done" ? "done" : faceFor(state, 1)
+    var row = { session: list[i], state: state, face: face, section: section }
+    if (section === "active" && (state === "working" || state === "ultrawork")) running.push(row)
+    else rows[section].push(row)
+  }
+  rows.active = running.concat(rows.active)
+  var out = []
+  for (var j = 0; j < SECTIONS.length; j++) {
+    out.push({ key: SECTIONS[j].key, title: SECTIONS[j].title, rows: rows[SECTIONS[j].key] })
+  }
+  return out
+}
+
+// Rows in panel order: `main` is 진행 중 / 결정 필요 / 완료 back to back, each
+// section's first row carrying the header; `history` is the collapsed tail.
+function flattenSections(sections) {
+  var list = Array.isArray(sections) ? sections : []
+  var main = []
+  var history = []
+  for (var i = 0; i < list.length; i++) {
+    var section = record(list[i])
+    var rows = Array.isArray(section.rows) ? section.rows : []
+    for (var j = 0; j < rows.length; j++) {
+      var row = {
+        session: rows[j].session,
+        state: rows[j].state,
+        face: rows[j].face,
+        section: String(section.key || ""),
+        title: String(section.title || ""),
+        count: rows.length,
+        first: j === 0
+      }
+      if (section.key === "history") history.push(row)
+      else main.push(row)
+    }
+  }
+  return { main: main, history: history }
+}
+
+// Korean age for the card meta line; numbers stay digits for the mono font.
+function ageLabel(activityMs, nowMs) {
+  var at = number(activityMs, 0)
+  var now = number(nowMs, 0)
+  if (!(at > 0) || !(now > 0)) return ""
+  var sec = Math.max(0, Math.round((now - at) / 1000))
+  if (sec < 60) return "\ubc29\uae08"
+  if (sec < 3600) return Math.round(sec / 60) + "\ubd84 \uc804"
+  if (sec < 86400) return Math.round(sec / 3600) + "\uc2dc\uac04 \uc804"
+  return Math.round(sec / 86400) + "\uc77c \uc804"
+}
+
+// Why 열기 could not act, in the panel's voice.
+function reasonKo(reason) {
+  switch (String(reason || "")) {
+  case "running elsewhere": return "\ub2e4\ub978 \ud130\ubbf8\ub110\uc5d0\uc11c \uc5f4\ub824 \uc788\uc5b4\uc694."
+  case "invalid session path or agent directory": return "\uc138\uc158 \ud30c\uc77c\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694."
+  case "invalid launcher": return "\uc2e4\ud589 \ud30c\uc77c \uc124\uc815\uc744 \ud655\uc778\ud558\uc138\uc694."
+  case "": return "\uc774 \uc138\uc158\uc740 \uc5f4 \uc218 \uc5c6\uc5b4\uc694."
+  default: return String(reason)
+  }
+}
+
+// Bar tooltip / header meta from `aggregate()`: counts by what they need.
+function summaryLine(summary) {
+  var s = record(summary)
+  var counts = record(s.counts)
+  var total = count(s.total)
+  if (total === 0) return "OmO \u00b7 \uc138\uc158 \uc5c6\uc74c"
+  var segments = []
+  var working = count(counts.working) + count(counts.ultrawork)
+  var decide = count(counts.waiting) + count(counts.error)
+  if (working > 0) segments.push("\uc77c\ud558\ub294 \uc911 " + working)
+  if (decide > 0) segments.push("\uacb0\uc815 \ud544\uc694 " + decide)
+  if (count(counts.success) > 0) segments.push("\uc644\ub8cc " + count(counts.success))
+  if (segments.length === 0) return "OmO \u00b7 \uc138\uc158 " + total + " \u00b7 \uc26c\ub294 \uc911"
+  return "OmO \u00b7 " + segments.join(" \u00b7 ")
+}
+
+// ------------------------------------------------------------- squircle
+
+// SVG path of a continuous-corner rounded rect: one cubic per corner whose
+// handles reach 90 % of the radius, which lands the 45° point at 0.16 r from
+// the corner (a superellipse of degree 4 puts it at 0.159 r; a circle at
+// 0.293 r). Radius defaults to the icon ratio, 22.5 % of the short side.
+function squirclePath(width, height, radius) {
+  var w = Math.max(0, number(width, 0))
+  var h = Math.max(0, number(height, 0))
+  var r = radius === undefined || radius === null || number(radius, -1) < 0 ? 0.225 * Math.min(w, h) : number(radius, 0)
+  r = clamp(r, 0, Math.min(w, h) / 2)
+  var k = 0.9 * r
+  var f = function(n) { return String(Math.round(n * 1000) / 1000) }
+  return "M" + f(r) + " 0"
+    + " L" + f(w - r) + " 0"
+    + " C" + f(w - r + k) + " 0 " + f(w) + " " + f(r - k) + " " + f(w) + " " + f(r)
+    + " L" + f(w) + " " + f(h - r)
+    + " C" + f(w) + " " + f(h - r + k) + " " + f(w - r + k) + " " + f(h) + " " + f(w - r) + " " + f(h)
+    + " L" + f(r) + " " + f(h)
+    + " C" + f(r - k) + " " + f(h) + " 0 " + f(h - r + k) + " 0 " + f(h - r)
+    + " L0 " + f(r)
+    + " C0 " + f(r - k) + " " + f(r - k) + " 0 " + f(r) + " 0"
+    + " Z"
+}
+
 // ------------------------------------------------------------------ polling
 
 // Base interval by activity, doubled per backoff level, always inside
@@ -652,6 +893,24 @@ var exportsObject = {
   filterLabel: filterLabel,
   clampIndex: clampIndex,
   relativeTime: relativeTime,
+  FACES: FACES,
+  TOKENS: TOKENS,
+  badgeCount: badgeCount,
+  SECTIONS: SECTIONS,
+  faceFor: faceFor,
+  textFace: textFace,
+  copyFor: copyFor,
+  barCopy: barCopy,
+  accentFor: accentFor,
+  stateLabelKo: stateLabelKo,
+  isComplete: isComplete,
+  sectionOf: sectionOf,
+  groupSections: groupSections,
+  flattenSections: flattenSections,
+  ageLabel: ageLabel,
+  reasonKo: reasonKo,
+  summaryLine: summaryLine,
+  squirclePath: squirclePath,
   pollInterval: pollInterval,
   settingString: settingString,
   settingInt: settingInt,

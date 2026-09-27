@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.tmdgusya.omo-clock",
+  "name": "OmO Clock",
+  "version": "1.0.0",
+  "author": "tmdgusya",
+  "description": "Compact mono clock with a Korean weekday",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Clock.qml"
+  },
+  "barWidget": {
+    "displayName": "OmO Clock",
+    "description": "Compact mono clock with a Korean weekday",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}

@@ -93,7 +93,7 @@ describe("parseList", () => {
     expect(s.sessionPath).toBe("")
     expect(s.cwd).toBe("")
     expect(s.focusAddress).toBe("")
-    expect(parsed({ title: "" }).title).toBe("Untitled")
+    expect(parsed({ title: "" }).title).toBe("\uc81c\ubaa9 \uc5c6\uc74c")
     expect(parsed({ focus: { address: "0x5601ab" } }).focusAddress).toBe("0x5601ab")
   })
 
@@ -436,6 +436,169 @@ describe("recent runtime", () => {
     expect(summary.animated).toBe(false)
     expect(summary.glow).toBe(false)
     expect(Model.stateLabel("recent")).toBe("recent")
+  })
+})
+
+describe("v3 faces and copy", () => {
+  test("faceFor maps display states to the face vocabulary and sleeps without sessions", () => {
+    expect(Model.faceFor("working", 2)).toBe("working")
+    expect(Model.faceFor("ultrawork", 1)).toBe("ultrawork")
+    expect(Model.faceFor("waiting", 1)).toBe("waiting")
+    expect(Model.faceFor("error", 1)).toBe("error")
+    expect(Model.faceFor("success", 1)).toBe("done")
+    expect(Model.faceFor("idle", 3)).toBe("idle")
+    expect(Model.faceFor("unknown", 1)).toBe("idle")
+    expect(Model.faceFor("idle", 0)).toBe("sleep")
+    expect(Model.faceFor("ended", 4)).toBe("sleep")
+  })
+
+  test("every face has a text form and one line of Korean copy", () => {
+    const seen = new Set()
+    for (const face of Model.FACES) {
+      expect(Model.textFace(face)).not.toBe("")
+      expect(Model.copyFor(face)).toMatch(/\uc694\.$/)
+      seen.add(Model.copyFor(face))
+    }
+    expect(seen.size).toBe(Model.FACES.length)
+    expect(Model.textFace("ultrawork")).toBe("OmO\u26a1")
+    expect(Model.textFace("sleep")).toBe("-m-")
+    expect(Model.textFace("bogus")).toBe("OmO")
+    expect(Model.copyFor("bogus")).toBe(Model.copyFor("idle"))
+  })
+
+  test("the bar shows copy only while a session needs eyes", () => {
+    expect(Model.barCopy("working")).toBe(Model.copyFor("working"))
+    expect(Model.barCopy("ultrawork")).toBe(Model.copyFor("ultrawork"))
+    expect(Model.barCopy("waiting")).toBe(Model.copyFor("waiting"))
+    expect(Model.barCopy("error")).toBe(Model.copyFor("error"))
+    expect(Model.barCopy("idle")).toBe("")
+    expect(Model.barCopy("sleep")).toBe("")
+    expect(Model.barCopy("done")).toBe("")
+  })
+
+  test("the badge counts live sessions and blocked ones alike", () => {
+    const list = (items) => Model.parseList(listOutput(items)).sessions
+    expect(Model.badgeCount(Model.aggregate([], NOW, {}))).toBe(0)
+    const blocked = rawSession({ id: "err", runtime: working, goal: { status: "blocked" } })
+    expect(Model.badgeCount(Model.aggregate(list([blocked]), NOW, {}))).toBe(1)
+    expect(Model.badgeCount(Model.aggregate(list([blocked, rawSession({ id: "w", runtime: waiting }), rawSession({ id: "e", runtime: ended })]), NOW, {}))).toBe(2)
+    expect(Model.badgeCount(Model.aggregate(list([blocked]), NOW, { err: true }))).toBe(1)
+  })
+
+  test("accents are earned by state only", () => {
+    expect(Model.accentFor("working")).toBe("aqua")
+    expect(Model.accentFor("ultrawork")).toBe("aqua")
+    expect(Model.accentFor("waiting")).toBe("amber")
+    expect(Model.accentFor("error")).toBe("coral")
+    expect(Model.accentFor("done")).toBe("")
+    expect(Model.accentFor("idle")).toBe("")
+    expect(Model.accentFor("sleep")).toBe("")
+  })
+
+  test("Korean state labels cover every display state", () => {
+    const labels = Model.STATES.map((state) => Model.stateLabelKo(state))
+    expect(labels.every((label) => label !== "")).toBe(true)
+    expect(new Set(labels).size).toBe(Model.STATES.length)
+    expect(Model.stateLabelKo("nonsense")).toBe(Model.stateLabelKo("unknown"))
+  })
+
+  test("age labels are Korean and deterministic against a fixed now", () => {
+    expect(Model.ageLabel(NOW - 10 * 1000, NOW)).toBe("\ubc29\uae08")
+    expect(Model.ageLabel(NOW - 5 * 60 * 1000, NOW)).toBe("5\ubd84 \uc804")
+    expect(Model.ageLabel(NOW - 3 * 3600 * 1000, NOW)).toBe("3\uc2dc\uac04 \uc804")
+    expect(Model.ageLabel(NOW - 2 * 86400 * 1000, NOW)).toBe("2\uc77c \uc804")
+    expect(Model.ageLabel(0, NOW)).toBe("")
+  })
+
+  test("open reasons are spoken in the panel's voice", () => {
+    expect(Model.reasonKo("running elsewhere")).toBe("\ub2e4\ub978 \ud130\ubbf8\ub110\uc5d0\uc11c \uc5f4\ub824 \uc788\uc5b4\uc694.")
+    expect(Model.reasonKo("invalid session path or agent directory")).toBe("\uc138\uc158 \ud30c\uc77c\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.")
+    expect(Model.reasonKo("")).toBe("\uc774 \uc138\uc158\uc740 \uc5f4 \uc218 \uc5c6\uc5b4\uc694.")
+    expect(Model.reasonKo("custom reason")).toBe("custom reason")
+  })
+
+  test("summary line counts by need and stays quiet when nothing runs", () => {
+    const list = (items) => Model.parseList(listOutput(items)).sessions
+    expect(Model.summaryLine(Model.aggregate([], NOW, {}))).toBe("OmO \u00b7 \uc138\uc158 \uc5c6\uc74c")
+    const busy = Model.aggregate(list([
+      rawSession({ id: "a", runtime: working }),
+      rawSession({ id: "b", runtime: working, ulw: { passed: 1, total: 3, status: "in_progress" } }),
+      rawSession({ id: "c", runtime: waiting }),
+      rawSession({ id: "d", runtime: idleProcess, goal: { status: "blocked" } }),
+      rawSession({ id: "e", runtime: idleProcess, goal: { status: "complete" }, activityAt: secondsAgo(10) }),
+    ]), NOW, {})
+    expect(Model.summaryLine(busy)).toBe("OmO \u00b7 \uc77c\ud558\ub294 \uc911 2 \u00b7 \uacb0\uc815 \ud544\uc694 2 \u00b7 \uc644\ub8cc 1")
+    const quiet = Model.aggregate(list([rawSession({ id: "q", runtime: idleProcess }), rawSession({ id: "r", runtime: ended })]), NOW, {})
+    expect(Model.summaryLine(quiet)).toBe("OmO \u00b7 \uc138\uc158 2 \u00b7 \uc26c\ub294 \uc911")
+  })
+
+  test("squircle path draws four cubic corners inside the box at the icon ratio", () => {
+    const path = Model.squirclePath(40, 20)
+    expect(path.startsWith("M4.5 0")).toBe(true)
+    expect(path.endsWith("Z")).toBe(true)
+    expect(path.match(/C/g)).toHaveLength(4)
+    const numbers = path.match(/-?\d+(\.\d+)?/g).map(Number)
+    expect(Math.min(...numbers)).toBeGreaterThanOrEqual(0)
+    expect(numbers.filter((n, i) => i % 2 === 0).every((x) => x <= 40)).toBe(true)
+    expect(numbers.filter((n, i) => i % 2 === 1).every((y) => y <= 20)).toBe(true)
+    expect(Model.squirclePath(20, 20, 100).startsWith("M10 0")).toBe(true)
+    expect(Model.squirclePath(20, 20, 2).startsWith("M2 0")).toBe(true)
+  })
+})
+
+describe("v3 sections", () => {
+  const list = (items) => Model.parseList(listOutput(items)).sessions
+  const sessions = list([
+    rawSession({ id: "idle-plain", runtime: idleProcess, activityAt: secondsAgo(5) }),
+    rawSession({ id: "work", runtime: working, activityAt: secondsAgo(10) }),
+    rawSession({ id: "ulw", runtime: working, ulw: { passed: 1, total: 3, status: "in_progress" }, activityAt: secondsAgo(20) }),
+    rawSession({ id: "recent", runtime: { kind: "unknown", status: "recent", working: false }, activityAt: secondsAgo(30) }),
+    rawSession({ id: "ask", runtime: waiting, activityAt: secondsAgo(40) }),
+    rawSession({ id: "blocked", runtime: working, goal: { status: "blocked" }, activityAt: secondsAgo(50) }),
+    rawSession({ id: "fresh-done", runtime: idleProcess, goal: { status: "complete" }, activityAt: secondsAgo(30) }),
+    rawSession({ id: "old-done", runtime: idleProcess, ulw: { passed: 3, total: 3, status: "complete" }, activityAt: secondsAgo(900) }),
+    rawSession({ id: "gone", runtime: ended, activityAt: secondsAgo(1000) }),
+    rawSession({ id: "mystery", activityAt: secondsAgo(2000) }),
+  ])
+
+  test("groups by need, pins verified work first, and keeps collector order otherwise", () => {
+    const sections = Model.groupSections(sessions, NOW, {})
+    expect(sections.map((s) => s.key)).toEqual(["active", "decide", "done", "history"])
+    expect(sections.map((s) => s.title)).toEqual(["\uc9c4\ud589 \uc911", "\uacb0\uc815 \ud544\uc694", "\uc644\ub8cc", "\uc774\uc804 \uae30\ub85d"])
+    const ids = (key) => sections.find((s) => s.key === key).rows.map((r) => r.session.id)
+    expect(ids("active")).toEqual(["work", "ulw", "idle-plain", "recent"])
+    expect(ids("decide")).toEqual(["ask", "blocked"])
+    expect(ids("done")).toEqual(["fresh-done", "old-done"])
+    expect(ids("history")).toEqual(["gone", "mystery"])
+  })
+
+  test("rows carry the state and the face the card shows", () => {
+    const sections = Model.groupSections(sessions, NOW, {})
+    const row = (id) => sections.flatMap((s) => s.rows).find((r) => r.session.id === id)
+    expect(row("ulw")).toMatchObject({ state: "ultrawork", face: "ultrawork", section: "active" })
+    expect(row("blocked")).toMatchObject({ state: "error", face: "error", section: "decide" })
+    expect(row("fresh-done")).toMatchObject({ state: "success", face: "done" })
+    expect(row("old-done")).toMatchObject({ state: "idle", face: "done", section: "done" })
+    expect(row("gone")).toMatchObject({ state: "ended", face: "sleep" })
+    expect(row("mystery")).toMatchObject({ state: "unknown", face: "idle", section: "history" })
+  })
+
+  test("a dismissed block returns to the section its runtime proves", () => {
+    const sections = Model.groupSections(sessions, NOW, { blocked: true })
+    expect(sections.find((s) => s.key === "decide").rows.map((r) => r.session.id)).toEqual(["ask"])
+    expect(sections.find((s) => s.key === "active").rows.map((r) => r.session.id)).toEqual(["work", "ulw", "blocked", "idle-plain", "recent"])
+  })
+
+  test("flattening keeps the main sections in order and parks history separately", () => {
+    const flat = Model.flattenSections(Model.groupSections(sessions, NOW, {}))
+    expect(flat.main.map((r) => r.session.id)).toEqual(["work", "ulw", "idle-plain", "recent", "ask", "blocked", "fresh-done", "old-done"])
+    expect(flat.main.map((r) => r.first)).toEqual([true, false, false, false, true, false, true, false])
+    expect(flat.main[4]).toMatchObject({ title: "\uacb0\uc815 \ud544\uc694", count: 2, section: "decide" })
+    expect(flat.history.map((r) => r.session.id)).toEqual(["gone", "mystery"])
+    expect(flat.history[0]).toMatchObject({ first: true, count: 2, title: "\uc774\uc804 \uae30\ub85d" })
+    const empty = Model.flattenSections(Model.groupSections([], NOW, {}))
+    expect(empty.main).toEqual([])
+    expect(empty.history).toEqual([])
   })
 })
 

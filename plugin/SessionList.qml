@@ -1,57 +1,150 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Effects
+import QtQuick.Shapes
 import qs.Commons
-import qs.Ui
 import "Model.js" as Model
 
-// Panel content: a hero (cat + live summary pills), a segmented filter, one
-// row per session with verified-working rows pinned on top, the selected
-// row's ledger progress and actions, and the key legend. Progress is shown
-// as counts only (todo completed/total, verified passed/total); state chips
-// carry only what the collector could prove. Every animation is gated on
-// `reduceMotion`, and nothing moves for idle, unknown, ended, or stale rows:
-// the accent line and its breathing exist solely for runtime.working.
+// Panel content (docs/DESIGN-v3.md): a header (text face, copy, 새로 시작),
+// the sections 진행 중 / 결정 필요 / 완료 with one squircle card per session
+// (face 24, title, project + age, ledger bars, 열기 / 상세 / 닫기 on the
+// selected card), a collapsed 이전 기록 fold, and the key legend. Progress is
+// ledger counts only. Every looping motion lives in the bar cell; here only
+// selection, hover and the card fold move, and `reduceMotion` reduces those
+// to opacity swaps.
 Column {
   id: root
 
   property var panel: null
   property var collector: null
-  property string filter: "all"
   property int cursor: 0
-  property bool cursorActive: false
+  property bool historyOpen: false
+  // Why 열기 could not act, per session id; shown on that card until the
+  // panel reopens or a later 열기 succeeds. Reassigned whole so bindings
+  // re-evaluate.
+  property var openNotices: ({})
 
   readonly property color fg: Color.popups.text
-  readonly property color dim: Qt.darker(fg, 1.55)
-  readonly property color attention: panel ? panel.urgent : Color.urgent
-  // Moonlight: the accent lifted one step, used only for glows.
-  readonly property color glowTint: Qt.lighter(Color.accent, 1.12)
+  readonly property color muted: Model.TOKENS.muted
+  readonly property color plate: Model.TOKENS.plate
+  readonly property color ink: Model.TOKENS.ink
+  readonly property color attention: panel ? panel.urgent : Color.bar.active
   readonly property string fontFamily: panel ? panel.fontFamily : Style.font.family
+  readonly property string sansFamily: Model.TOKENS.sansFamily
   readonly property bool reduceMotion: panel ? panel.reduceMotion : false
-  readonly property bool opened: panel ? panel.opened === true : true
   readonly property double nowMs: panel ? panel.nowMs : 0
   readonly property var dismissed: panel ? panel.dismissed : ({})
   readonly property var summary: panel ? panel.summary : Model.aggregate([], 0, null)
   readonly property var sessions: collector ? collector.sessions : []
   readonly property bool stale: collector ? collector.stale : false
   readonly property bool partial: collector ? collector.partial : false
-  readonly property bool scanning: collector ? collector.scanning : false
-  // Filter membership and pinning never depend on the clock (only the
-  // success/idle chip does), so rows are rebuilt on data, filter, or
-  // dismissal changes alone.
-  readonly property var rows: pinRunning(Model.filterSessions(sessions, filter, 0, dismissed))
-  readonly property int selectedIndex: Model.clampIndex(cursor, rows.length)
-  readonly property var selected: rows.length > 0 ? rows[selectedIndex] : null
-  readonly property color track: Style.selectedFillFor(fg, Color.accent)
+  readonly property bool empty: !stale && sessions.length === 0
+  readonly property string face: stale ? "sleep" : (panel ? panel.face : "sleep")
 
-  readonly property int unverified: summary.counts ? summary.counts.unknown : 0
-  readonly property int errors: summary.counts ? summary.counts.error : 0
-  readonly property int recent: summary.counts && summary.counts.recent ? summary.counts.recent : 0
+  // Sizes from the contract: 11 / 12 / 14 / 20.
+  readonly property int fontCaption: Style.font.bodySmall
+  readonly property int fontBody: Style.font.body
+  readonly property int fontTitle: Style.font.title
+  readonly property int fontFace: Style.fontPx(20 / 12)
 
-  // Why Open could not act, per session id; shown on that row until the
-  // panel reopens or a later Open succeeds. Reassigned as a whole so
-  // bindings re-evaluate.
-  property var openNotices: ({})
+  // Sections never depend on the clock: a complete ledger is 완료 whenever it
+  // was completed; the fresh done blink is the bar's.
+  readonly property var grouped: Model.flattenSections(Model.groupSections(sessions, 0, dismissed))
+  readonly property var mainRows: grouped.main
+  readonly property var historyRows: grouped.history
+  readonly property int historyCount: historyRows.length
+  readonly property int visibleCount: mainRows.length + (historyOpen ? historyRows.length : 0)
+  readonly property int selectedIndex: Model.clampIndex(cursor, visibleCount)
+  readonly property var selectedRow: rowAt(selectedIndex)
+  readonly property var selected: selectedRow ? selectedRow.session : null
+
+  // Sliding selection plate: the selected card reports its geometry here and
+  // the single highlight moves between cards.
+  property real highlightY: 0
+  property real highlightHeight: 0
+  // Fold bookkeeping for the panel (list coordinates, settled).
+  property real selectedTop: 0
+  property real selectedBottom: 0
+
+  spacing: Style.spacing.xxl
+
+  function toneFor(accentName, fallback) {
+    if (accentName === "aqua") return Color.accent
+    if (accentName === "amber") return attention
+    if (accentName === "coral") return Color.urgent
+    return fallback
+  }
+
+  function rowAt(index) {
+    if (index < mainRows.length) return mainRows[index]
+    var i = index - mainRows.length
+    return historyOpen && i >= 0 && i < historyRows.length ? historyRows[i] : null
+  }
+
+  function metaLine(session) {
+    var parts = []
+    if (session.cwdLabel !== "") parts.push(session.cwdLabel)
+    var age = Model.ageLabel(session.activityMs, nowMs)
+    if (age !== "") parts.push(age)
+    return parts.join(" \u00b7 ")
+  }
+
+  function reset() {
+    cursor = 0
+    historyOpen = false
+    openNotices = ({})
+  }
+
+  function moveCursor(dy) {
+    if (visibleCount === 0) return
+    cursor = Model.clampIndex(selectedIndex + dy, visibleCount)
+  }
+
+  // Tab: the first card of the next section; landing on 이전 기록 opens it.
+  function jumpSection(direction) {
+    var starts = []
+    for (var i = 0; i < mainRows.length; i++) if (mainRows[i].first) starts.push(i)
+    if (historyCount > 0) starts.push(mainRows.length)
+    if (starts.length === 0) return
+    var current = 0
+    for (var j = 0; j < starts.length; j++) if (starts[j] <= selectedIndex) current = j
+    var next = (current + (direction < 0 ? -1 : 1) + starts.length) % starts.length
+    if (starts[next] >= mainRows.length) historyOpen = true
+    cursor = starts[next]
+  }
+
+  function toggleHistory() {
+    if (historyCount === 0) return
+    historyOpen = !historyOpen
+    if (!historyOpen && cursor >= mainRows.length) cursor = Math.max(0, mainRows.length - 1)
+  }
+
+  function selectedCwd() {
+    if (selected && selected.cwd !== "") return selected.cwd
+    return panel ? panel.latestCwd() : ""
+  }
+
+  // Enter, double-click and 열기 land here.
+  function activate() {
+    if (selected) openSession(selected)
+  }
+
+  function openSession(session) {
+    if (!session) return
+    if (panel) panel.openSession(session)
+    else if (collector) collector.requestView(session.sessionPath)
+  }
+
+  function viewSession(session) {
+    if (session && collector) collector.requestView(session.sessionPath)
+  }
+
+  function viewSelected() {
+    viewSession(selected)
+  }
+
+  function dismissSelected() {
+    if (selectedRow && panel && selectedRow.state === "error") panel.dismiss(selectedRow.session.id)
+  }
 
   function setOpenNotice(id, text) {
     var next = ({})
@@ -67,399 +160,156 @@ Column {
     openNotices = next
   }
 
-  // Model reasons are terse machine strings; the row shows plain UI copy.
-  function openReasonText(reason) {
-    var r = String(reason || "")
-    if (r === "running elsewhere") return "Running in another terminal"
-    if (r === "") return "Cannot open this session"
-    return r.charAt(0).toUpperCase() + r.slice(1)
-  }
-
-  // Live summary line under the title; the colored pills break it down.
-  readonly property string headerLine: {
-    if (stale) return "session data unavailable \u00b7 " + (collector ? collector.staleReason : "")
-    if (scanning && sessions.length === 0) return "Scanning\u2026"
-    if (sessions.length === 0) return "no senpi sessions"
-    var line = sessions.length + (sessions.length === 1 ? " session" : " sessions")
-    if (summary.active === 0) line += " \u00b7 none active"
-    return line
-  }
-
-  // Sliding selection card: the selected delegate reports its geometry here
-  // and the single highlight rectangle animates between rows.
-  property real highlightY: 0
-  property real highlightHeight: 0
-
-  // Fold bookkeeping for the panel: where the selected row will end once its
-  // details have expanded (list coordinates), and how many rows sit below a
-  // given viewport bottom. `layoutTick` only exists so a binding re-runs when
-  // the list relayouts.
-  property real selectedTargetHeight: 0
-  readonly property real selectedTop: settledTop(selectedIndex, rowList.implicitHeight)
-  readonly property real selectedBottom: selectedTop + selectedTargetHeight
-
-  // Where row `index` will sit once every other row has collapsed: only one
-  // row is ever expanded, so the settled layout is the collapsed heights of
-  // the rows above it. Delegates are created in index order.
-  function settledTop(index, layoutTick) {
-    var y = rowArea.y
-    var seen = 0
-    for (var i = 0; i < rowList.children.length; i++) {
-      var child = rowList.children[i]
-      if (!child || child.collapsedHeight === undefined) continue
-      if (seen === index) return y
-      y += child.collapsedHeight + rowList.spacing
-      seen += 1
-    }
-    return y
-  }
-
+  // How many cards sit below a viewport bottom (list coordinates).
+  // `layoutTick` only exists so a binding re-runs when the list relayouts.
   function rowsBelow(viewportBottom, layoutTick) {
     var n = 0
-    var base = rowArea.y + rowList.y
-    for (var i = 0; i < rowList.children.length; i++) {
-      var child = rowList.children[i]
-      if (!child || !(child.height > 0)) continue
-      if (base + child.y + child.height > viewportBottom + 1) n += 1
+    for (var i = 0; i < stack.children.length; i++) {
+      var child = stack.children[i]
+      if (!child || child.isCard !== true || !(child.height > 0)) continue
+      var p = child.mapToItem(root, 0, 0)
+      if (p.y + child.height > viewportBottom + 1) n += 1
     }
     return n
   }
 
-  // Open reveal: rows created (or already present) while the panel is opening
-  // stagger in once per open. `revealSerial` replays existing delegates,
-  // `revealArmed` lets delegates rebuilt by a refresh during the first
-  // moments join the same timeline instead of starting a second one.
-  property bool revealArmed: false
-  property int revealSerial: 0
-  property double revealStartMs: 0
-
-  spacing: Style.spacing.xxl
-
-  onOpenedChanged: {
-    if (opened && !reduceMotion) {
-      revealArmed = true
-      revealStartMs = Date.now()
-      revealSerial += 1
-      revealTimer.restart()
-    } else {
-      revealArmed = false
-    }
-  }
-
-  Timer {
-    id: revealTimer
-    interval: 900
-    repeat: false
-    onTriggered: root.revealArmed = false
-  }
-
-  function reset() {
-    cursor = 0
-    cursorActive = false
-    openNotices = ({})
-  }
-
-  function moveCursor(dy) {
-    if (rows.length === 0) return
-    cursorActive = true
-    cursor = Model.clampIndex(selectedIndex + dy, rows.length)
-  }
-
-  function cycleFilter(step) {
-    filter = Model.nextFilter(filter, step)
-    cursor = 0
-  }
-
-  function stateOf(session) {
-    return Model.effectiveState(session, nowMs, dismissed)
-  }
-
-  function isRunningState(state) {
-    return state === "working" || state === "ultrawork"
-  }
-
-  // Verified-working sessions first, everything else in collector order.
-  // Stable: the collector already sorts by activity.
-  function pinRunning(list) {
-    var running = []
-    var rest = []
-    for (var i = 0; i < list.length; i++) {
-      if (isRunningState(Model.effectiveState(list[i], 0, dismissed))) running.push(list[i])
-      else rest.push(list[i])
-    }
-    return running.concat(rest)
-  }
-
-  function chipColor(state) {
-    if (state === "error") return Color.urgent
-    if (state === "waiting") return attention
-    if (state === "working" || state === "ultrawork" || state === "success") return Color.accent
-    return dim
-  }
-
-  function isPillState(state) {
-    return state === "error" || state === "waiting" || state === "working" || state === "ultrawork" || state === "success"
-  }
-
-  function selectedCwd() {
-    if (selected && selected.cwd !== "") return selected.cwd
-    return panel ? panel.latestCwd() : ""
-  }
-
-  function viewSelected() {
-    if (selected && collector) collector.requestView(selected.sessionPath)
-  }
-
-  // Enter, double-click, and the Open capsule all land here.
-  function activate() {
-    if (!selected) return
-    openSession(selected)
-  }
-
-  function openSession(session) {
-    if (!session) return
-    if (panel && typeof panel.openSession === "function" && panel.openSession(session)) return
-    // Before the Model API lands: focus a verified window, else show details.
-    if (panel && panel.focusSession(session)) return
-    if (collector) collector.requestView(session.sessionPath)
-  }
-
-  function dismissSelected() {
-    if (selected && panel && stateOf(selected) === "error") panel.dismiss(selected.id)
-  }
-
-  function countFor(which) {
-    return Model.filterSessions(sessions, which, 0, dismissed).length
-  }
-
-  // ---------- hero
+  // ---------- header: text face, copy, meta, 새로 시작
   Item {
-    id: hero
+    id: header
+    visible: !root.empty
     width: parent.width
-    implicitHeight: Math.max(heroCatFrame.height, heroText.implicitHeight)
+    implicitHeight: Math.max(headerText.implicitHeight, newButton.implicitHeight, headerFace.implicitHeight)
 
-    readonly property string topState: root.stale ? "idle" : root.summary.state
-    readonly property color tone: topState === "error" ? Color.urgent
-      : (topState === "waiting" ? root.attention : root.glowTint)
-    readonly property bool lit: !root.stale && (root.summary.running > 0 || topState === "waiting" || topState === "error")
-
-    Item {
-      id: heroCatFrame
-      width: Style.space(44)
-      height: width
+    Text {
+      id: headerFace
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
+      text: Model.textFace(root.face)
+      color: root.stale ? root.muted : root.toneFor(Model.accentFor(root.face), root.fg)
+      font.family: root.fontFamily
+      font.pixelSize: root.fontFace
+      font.weight: Font.Bold
+      renderType: Text.NativeRendering
 
-      // Moonlight disc behind the cat while something needs eyes: aqua for
-      // verified work, butter for a waiting human, coral for a failure.
-      Rectangle {
-        id: heroGlowSource
-        anchors.centerIn: parent
-        width: Style.space(30)
-        height: width
-        radius: width / 2
-        color: hero.tone
-        visible: false
-      }
-
-      MultiEffect {
-        id: heroGlow
-        anchors.fill: heroGlowSource
-        source: heroGlowSource
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 32
-        opacity: hero.lit ? 0.55 : 0
-        visible: opacity > 0
-
-        Behavior on opacity {
-          enabled: !root.reduceMotion
-          NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
-        }
-      }
-
-      Cat {
-        id: headerCat
-        anchors.centerIn: parent
-        size: Style.space(40)
-        face: root.panel ? root.panel.face : "idle"
-        stale: root.stale
-        running: root.panel ? root.panel.catRunning : false
-        glow: root.panel ? root.panel.catGlow : false
-        reduceMotion: root.reduceMotion
-        showDot: false
-        accent: Color.accent
-        attention: root.attention
-        failure: Color.urgent
+      Behavior on color {
+        enabled: !root.reduceMotion
+        ColorAnimation { duration: 220 }
       }
     }
 
     Column {
-      id: heroText
-      anchors.left: heroCatFrame.right
-      anchors.leftMargin: Style.spacing.xxl
-      anchors.right: parent.right
+      id: headerText
+      anchors.left: headerFace.right
+      anchors.leftMargin: Style.spacing.xl
+      anchors.right: newButton.left
+      anchors.rightMargin: Style.spacing.xl
       anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.spacing.sm
+      spacing: Style.spacing.xxs
 
       Text {
         textFormat: Text.PlainText
         width: parent.width
-        text: "Sessions"
+        text: root.stale ? "세션 정보를 읽지 못했어요." : Model.copyFor(root.face)
         color: root.fg
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.heading
-        font.bold: true
+        font.family: root.sansFamily
+        font.pixelSize: root.fontTitle
+        font.weight: Font.Medium
         elide: Text.ElideRight
       }
 
-      Flow {
+      Text {
+        textFormat: Text.PlainText
         width: parent.width
-        spacing: Style.spacing.sm
-
-        // Padded to pill height so the line and the pills share a baseline.
-        Text {
-          id: heroMeta
-          textFormat: Text.PlainText
-          width: Math.min(implicitWidth, parent.width)
-          text: root.headerLine
-          color: root.stale ? Color.urgent : root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          topPadding: Style.spacing.xs
-          bottomPadding: Style.spacing.xs
-          elide: Text.ElideRight
-        }
-
-        SummaryPill { count: root.stale ? 0 : root.summary.running; word: "working"; tone: Color.accent }
-        SummaryPill { count: root.stale ? 0 : root.summary.waiting; word: "waiting"; tone: root.attention }
-        SummaryPill { count: root.stale ? 0 : root.errors; word: "error"; tone: Color.urgent }
-        SummaryPill { count: root.stale ? 0 : root.recent; word: "recent"; tone: root.dim; quiet: true }
-        SummaryPill { count: root.stale ? 0 : root.unverified; word: "unverified"; tone: root.dim; quiet: true }
+        text: root.stale
+          ? (root.collector ? root.collector.staleReason : "")
+          : Model.summaryLine(root.summary).replace(/^OmO \u00b7 /, "")
+        color: root.muted
+        font.family: root.fontFamily
+        font.pixelSize: root.fontCaption
+        elide: Text.ElideRight
       }
+    }
+
+    PlateButton {
+      id: newButton
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: "새로 시작"
+      onClicked: if (root.panel) root.panel.launch(root.selectedCwd())
     }
   }
 
-  // ---------- segmented filter
-  Rectangle {
-    id: tabs
-    width: parent.width
-    implicitHeight: tabRow.implicitHeight + pad * 2
-    visible: root.sessions.length > 0
-    radius: Style.cornerRadius
-    color: Style.normalFillFor(root.fg, Color.accent)
-
-    readonly property int pad: Style.spacing.xxs
-    readonly property real cellWidth: (width - pad * 2) / Model.FILTERS.length
-    readonly property int activeIndex: Math.max(0, Model.FILTERS.indexOf(root.filter))
-
-    Rectangle {
-      id: thumb
-      x: tabs.pad + tabs.activeIndex * tabs.cellWidth
-      y: tabs.pad
-      width: tabs.cellWidth
-      height: tabs.height - tabs.pad * 2
-      radius: Style.cornerRadius
-      color: Style.selectedFillFor(root.fg, Color.accent)
-
-      Behavior on x {
-        enabled: !root.reduceMotion
-        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-      }
-    }
-
-    Row {
-      id: tabRow
-      x: tabs.pad
-      y: tabs.pad
-
-      Repeater {
-        model: Model.FILTERS
-
-        SegmentTab {
-          required property string modelData
-          which: modelData
-          width: tabs.cellWidth
-        }
-      }
-    }
-  }
-
-  // ---------- notices: a quiet one-line info chip
-  Rectangle {
-    id: notice
+  // ---------- notice: the collector hit a ceiling and returned a bounded list
+  Text {
     visible: root.partial && !root.stale && root.collector && root.collector.notice !== ""
-    width: Math.min(parent.width, noticeText.implicitWidth + Style.spacing.lg * 2)
-    implicitHeight: noticeText.implicitHeight + Style.spacing.xs * 2
-    radius: Style.cornerRadius
-    color: Style.normalFillFor(root.fg, Color.accent)
-
-    Text {
-      id: noticeText
-      textFormat: Text.PlainText
-      anchors.fill: parent
-      anchors.leftMargin: Style.spacing.lg
-      anchors.rightMargin: Style.spacing.lg
-      verticalAlignment: Text.AlignVCenter
-      text: "partial list \u00b7 " + (root.collector ? root.collector.notice : "")
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-    }
+    textFormat: Text.PlainText
+    width: parent.width
+    text: "일부만 읽었어요 \u00b7 " + (root.collector ? root.collector.notice : "")
+    color: root.muted
+    font.family: root.sansFamily
+    font.pixelSize: root.fontCaption
+    elide: Text.ElideRight
   }
 
-  // ---------- empty state
+  // ---------- empty state: sleep face, one sentence, one button
   Column {
-    visible: root.rows.length === 0
+    visible: root.empty
     width: parent.width
-    spacing: Style.spacing.sm
-    topPadding: Style.space(8)
+    spacing: Style.spacing.xl
+    topPadding: Style.space(20)
     bottomPadding: Style.space(8)
 
-    Text {
-      textFormat: Text.PlainText
-      width: parent.width
-      text: root.stale
-        ? "The collector did not answer; showing nothing rather than a guess."
-        : (root.sessions.length === 0 ? "No senpi sessions found" : "No " + Model.filterLabel(root.filter).toLowerCase() + " sessions")
-      color: root.fg
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
-      horizontalAlignment: Text.AlignHCenter
-      wrapMode: Text.WordWrap
+    Cat {
+      anchors.horizontalCenter: parent.horizontalCenter
+      size: Style.space(40)
+      inset: 0
+      face: "sleep"
+      reduceMotion: true
+      fontFamily: root.fontFamily
     }
 
     Text {
+      anchors.horizontalCenter: parent.horizontalCenter
       textFormat: Text.PlainText
-      width: parent.width
-      text: "n  launch a new senpi session (with live state)"
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      horizontalAlignment: Text.AlignHCenter
+      text: Model.copyFor("idle")
+      color: root.fg
+      font.family: root.sansFamily
+      font.pixelSize: root.fontTitle
+      font.weight: Font.Medium
+    }
+
+    PlateButton {
+      anchors.horizontalCenter: parent.horizontalCenter
+      primary: true
+      text: "새로 시작"
+      onClicked: if (root.panel) root.panel.launch(root.panel.latestCwd())
     }
   }
 
-  // ---------- rows
+  // ---------- sections and cards
   Item {
     id: rowArea
+    visible: root.mainRows.length > 0 || root.historyCount > 0
     width: parent.width
-    implicitHeight: rowList.implicitHeight
-    visible: root.rows.length > 0
+    implicitHeight: stack.implicitHeight
 
-    // One highlight card for the whole list; it slides to the selected row
-    // and grows with that row's details.
-    Rectangle {
+    // One selection plate for the whole list; it slides to the selected card
+    // and follows that card's height as its actions fold open.
+    Shape {
       id: highlight
       x: 0
-      width: parent.width
       y: root.highlightY
+      width: parent.width
       height: root.highlightHeight
-      radius: Style.cornerRadius
-      color: Style.selectedFillFor(root.fg, Color.accent)
-      visible: height > 0
+      preferredRendererType: Shape.CurveRenderer
+      visible: root.visibleCount > 0 && height > 0
+
+      ShapePath {
+        strokeWidth: -1
+        fillColor: Style.selectedFillFor(root.fg, Color.accent)
+        PathSvg { path: Model.squirclePath(highlight.width, highlight.height) }
+      }
 
       Behavior on y {
         enabled: !root.reduceMotion
@@ -468,568 +318,222 @@ Column {
     }
 
     Column {
-      id: rowList
+      id: stack
       width: parent.width
       spacing: Style.spacing.xxs
 
       Repeater {
-        model: root.rows
+        model: root.mainRows
+        SessionCard {}
+      }
 
-        Column {
-          id: row
-          required property var modelData
-          required property int index
+      // 이전 기록: ended and unverified sessions, folded until asked for.
+      Item {
+        id: fold
+        readonly property bool isCard: false
+        visible: root.historyCount > 0
+        width: parent.width
+        implicitHeight: foldRow.height + (root.mainRows.length > 0 ? Style.spacing.xl : 0)
 
-          readonly property bool isSelected: index === root.selectedIndex
-          readonly property string rowState: root.stateOf(modelData)
-          readonly property bool isRunning: root.isRunningState(rowState)
-          readonly property bool quiet: rowState === "ended" || rowState === "unknown"
-          readonly property var ledger: Model.progress(modelData)
-          readonly property bool showsView: root.collector && root.collector.viewPath !== "" && root.collector.viewPath === modelData.sessionPath
-            && (root.collector.viewing || root.collector.viewOutput !== "" || root.collector.viewError !== "")
-          // Height of this row with its details closed (the settled height
-          // of every unselected row).
-          readonly property real collapsedHeight: rowContent.implicitHeight + Style.spacing.md * 2
+        Item {
+          id: foldRow
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          height: Style.space(28)
 
-          width: rowList.width
-          spacing: 0
-          transform: Translate { id: shift }
+          Shape {
+            id: foldPlate
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            opacity: foldArea.containsMouse ? 1 : 0
+            visible: opacity > 0
 
-          function syncHighlight() {
-            if (!isSelected) return
-            root.highlightY = y
-            root.highlightHeight = height
-            root.selectedTargetHeight = collapsedHeight + details.implicitHeight
-          }
-
-          function playReveal() {
-            if (root.reduceMotion) return
-            var elapsed = root.revealArmed ? Date.now() - root.revealStartMs : 0
-            var wait = Math.min(index, 7) * 32 - elapsed
-            if (wait + 220 <= 0) return
-            reveal.stop()
-            revealPause.duration = Math.max(0, wait)
-            opacity = 0
-            shift.y = Style.space(10)
-            reveal.start()
-          }
-
-          function replayProgress() {
-            if (!isSelected) return
-            todoLine.replay()
-            ulwLine.replay()
-          }
-
-          onIsSelectedChanged: {
-            syncHighlight()
-            if (isSelected) replayProgress()
-          }
-          onYChanged: syncHighlight()
-          onHeightChanged: syncHighlight()
-          Component.onCompleted: {
-            syncHighlight()
-            if (root.revealArmed) {
-              playReveal()
-              replayProgress()
+            ShapePath {
+              strokeWidth: -1
+              fillColor: Style.hoverFillFor(root.fg, Color.accent)
+              PathSvg { path: Model.squirclePath(foldPlate.width, foldPlate.height) }
             }
-          }
 
-          Connections {
-            target: root
-            function onRevealSerialChanged() {
-              row.playReveal()
-              row.replayProgress()
-            }
-          }
-
-          SequentialAnimation {
-            id: reveal
-
-            PauseAnimation { id: revealPause; duration: 0 }
-            ParallelAnimation {
-              NumberAnimation { target: row; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
-              NumberAnimation { target: shift; property: "y"; to: 0; duration: 320; easing.type: Easing.OutCubic }
-            }
-          }
-
-          // Two lines per row: the title owns the full width; chip, project,
-          // and time sit underneath. The selected title wraps to three lines.
-          Rectangle {
-            id: rowSurface
-            width: parent.width
-            height: rowContent.implicitHeight + Style.spacing.md * 2
-            radius: Style.cornerRadius
-            color: rowHover.containsMouse ? Style.hoverFillFor(root.fg, Color.accent) : "transparent"
-
-            Behavior on color {
+            Behavior on opacity {
               enabled: !root.reduceMotion
-              ColorAnimation { duration: 120 }
+              NumberAnimation { duration: 140 }
             }
+          }
 
-            Behavior on height {
-              enabled: !root.reduceMotion
-              NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
-            }
+          Row {
+            anchors.left: parent.left
+            anchors.leftMargin: Style.spacing.lg
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.spacing.md
 
-            // Verified work only: a hairline of accent with a soft moonlight
-            // halo that breathes. Never shown for waiting, idle, unknown,
-            // ended, or error rows; it holds still and dims when the
-            // collector data itself is stale.
-            Item {
-              id: accentLine
-              visible: row.isRunning
-              anchors.left: parent.left
-              anchors.top: parent.top
-              anchors.bottom: parent.bottom
-              anchors.topMargin: Style.spacing.md
-              anchors.bottomMargin: Style.spacing.md
-              width: Style.space(16)
-              opacity: root.stale ? 0.35 : 0.85
-
-              SequentialAnimation on opacity {
-                running: row.isRunning && !root.reduceMotion && root.opened && !root.stale
-                loops: Animation.Infinite
-                NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
-                NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }
-              }
-
-              Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                  orientation: Gradient.Horizontal
-                  GradientStop { position: 0.0; color: Util.alpha(root.glowTint, 0.30) }
-                  GradientStop { position: 1.0; color: Util.alpha(root.glowTint, 0.0) }
-                }
-              }
-
-              Rectangle {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: Style.spacing.xxs
-                radius: Style.cornerRadius
-                color: Color.accent
-              }
-            }
-
-            Cat {
-              id: rowFace
-              anchors.left: parent.left
-              anchors.leftMargin: Style.spacing.xl
-              anchors.top: parent.top
-              anchors.topMargin: Style.spacing.md + Math.max(0, Math.round((titleText.height - height) / 2))
-              size: Style.space(16)
-              face: row.rowState
-              running: false
-              glow: false
-              reduceMotion: true
-              showDot: false
-              accent: Color.accent
-              attention: root.attention
-              failure: Color.urgent
-              opacity: row.quiet ? 0.55 : 1
-            }
-
-            Column {
-              id: rowContent
-              anchors.left: rowFace.right
-              anchors.leftMargin: Style.spacing.lg
-              anchors.right: parent.right
-              anchors.rightMargin: Style.spacing.lg
+            Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.spacing.xs
-
-              Text {
-                id: titleText
-                textFormat: Text.PlainText
-                width: parent.width
-                text: row.modelData.title
-                color: root.fg
-                opacity: row.quiet ? 0.8 : 1
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                elide: Text.ElideRight
-                wrapMode: row.isSelected ? Text.Wrap : Text.NoWrap
-                maximumLineCount: row.isSelected ? 3 : 1
-              }
-
-              Row {
-                id: meta
-                width: parent.width
-                spacing: Style.spacing.md
-
-                StateChip {
-                  kind: row.rowState
-                  anchors.verticalCenter: parent.verticalCenter
-                }
-
-                Text {
-                  id: projectText
-                  textFormat: Text.PlainText
-                  visible: row.modelData.cwdLabel !== ""
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Math.min(implicitWidth, Math.floor(meta.width * 0.5))
-                  text: row.modelData.cwdLabel
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  elide: Text.ElideRight
-                }
-
-                Text {
-                  textFormat: Text.PlainText
-                  visible: text !== ""
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: Model.relativeTime(row.modelData.activityMs, root.nowMs)
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-
-                Text {
-                  textFormat: Text.PlainText
-                  visible: row.modelData.partial === true
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: "partial"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.italic: true
-                }
-              }
+              text: Model.SECTIONS[3].title
+              color: root.muted
+              font.family: root.sansFamily
+              font.pixelSize: root.fontCaption
+              font.weight: Font.Medium
             }
 
-            MouseArea {
-              id: rowHover
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                root.cursorActive = true
-                root.cursor = row.index
-              }
-              onDoubleClicked: {
-                root.cursor = row.index
-                root.activate()
-              }
+            Text {
+              textFormat: Text.PlainText
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.historyCount
+              color: root.muted
+              font.family: root.fontFamily
+              font.pixelSize: root.fontCaption
             }
           }
 
-          Item {
-            id: expansion
-            width: parent.width
-            height: row.isSelected ? details.implicitHeight : 0
-            clip: true
+          Text {
+            textFormat: Text.PlainText
+            anchors.right: parent.right
+            anchors.rightMargin: Style.spacing.lg
+            anchors.verticalCenter: parent.verticalCenter
+            text: "\u203a"
+            color: root.muted
+            font.family: root.fontFamily
+            font.pixelSize: root.fontBody
+            rotation: root.historyOpen ? 90 : 0
 
-            Behavior on height {
+            Behavior on rotation {
               enabled: !root.reduceMotion
-              NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+              NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
             }
+          }
 
-            Column {
-              id: details
-              width: parent.width
-              leftPadding: Style.spacing.xl
-              rightPadding: Style.spacing.xl
-              topPadding: Style.spacing.sm
-              bottomPadding: Style.spacing.xl
-              spacing: Style.spacing.lg
-              opacity: row.isSelected ? 1 : 0
-
-              readonly property real innerWidth: width - leftPadding - rightPadding
-
-              Behavior on opacity {
-                enabled: !root.reduceMotion
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-              }
-
-              ProgressLine {
-                id: todoLine
-                visible: !!row.ledger.todo
-                width: details.innerWidth
-                label: row.ledger.todo ? row.ledger.todo.label : ""
-                done: row.ledger.todo ? row.ledger.todo.completed : 0
-                total: row.ledger.todo ? row.ledger.todo.total : 0
-                ratio: row.ledger.todo ? row.ledger.todo.ratio : 0
-              }
-
-              ProgressLine {
-                id: ulwLine
-                visible: !!row.ledger.ulw
-                width: details.innerWidth
-                label: row.ledger.ulw ? row.ledger.ulw.label : ""
-                done: row.ledger.ulw ? row.ledger.ulw.passed : 0
-                total: row.ledger.ulw ? row.ledger.ulw.total : 0
-                ratio: row.ledger.ulw ? row.ledger.ulw.ratio : 0
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                visible: text !== ""
-                width: details.innerWidth
-                text: Model.evidenceLabel(row.modelData)
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-              }
-
-              // Why the last Open on this row could not act.
-              Text {
-                textFormat: Text.PlainText
-                visible: text !== ""
-                width: details.innerWidth
-                text: root.openNotices[row.modelData.id] !== undefined ? root.openReasonText(root.openNotices[row.modelData.id]) : ""
-                color: root.attention
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-              }
-
-              Row {
-                spacing: Style.spacing.md
-
-                ActionCapsule {
-                  primary: true
-                  text: "Open"
-                  onClicked: root.openSession(row.modelData)
-                }
-
-                ActionCapsule {
-                  visible: row.modelData.sessionPath !== ""
-                  text: "Details"
-                  onClicked: if (root.collector) root.collector.requestView(row.modelData.sessionPath)
-                }
-
-                ActionCapsule {
-                  text: "Launch"
-                  onClicked: if (root.panel) root.panel.launch(row.modelData.cwd)
-                }
-
-                ActionCapsule {
-                  visible: row.rowState === "error"
-                  text: "Dismiss"
-                  onClicked: if (root.panel) root.panel.dismiss(row.modelData.id)
-                }
-              }
-
-              // Collector summary of the session file (id, title, directory,
-              // activity, runtime, ledgers) — not a transcript.
-              Rectangle {
-                visible: row.showsView
-                width: details.innerWidth
-                implicitHeight: viewColumn.implicitHeight + Style.spacing.lg * 2
-                radius: Style.cornerRadius
-                color: Style.normalFillFor(root.fg, Color.accent)
-
-                Column {
-                  id: viewColumn
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.top: parent.top
-                  anchors.margins: Style.spacing.lg
-                  spacing: Style.spacing.xs
-
-                  PanelSectionHeader {
-                    width: parent.width
-                    text: "SESSION DETAILS"
-                    foreground: root.fg
-                    fontFamily: root.fontFamily
-                  }
-
-                  Text {
-                    id: viewText
-                    textFormat: Text.PlainText
-                    width: parent.width
-                    text: root.collector && root.collector.viewing
-                      ? "Loading\u2026"
-                      : (root.collector && root.collector.viewOutput !== "" ? root.collector.viewOutput : (root.collector ? root.collector.viewError : ""))
-                    color: root.fg
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    wrapMode: Text.WrapAnywhere
-                  }
-                }
-              }
-            }
+          MouseArea {
+            id: foldArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggleHistory()
           }
         }
+      }
+
+      Repeater {
+        model: root.historyOpen ? root.historyRows : []
+        SessionCard { indexOffset: root.mainRows.length }
       }
     }
   }
 
   // ---------- key legend
   Text {
+    visible: !root.empty
     textFormat: Text.PlainText
     width: parent.width
-    text: "\u2191\u2193 j/k move \u00b7 \u23ce open \u00b7 v details \u00b7 n new\nd dismiss \u00b7 r refresh \u00b7 tab filter \u00b7 esc close"
-    color: root.dim
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
+    text: "\u2191\u2193 이동 \u00b7 \u23ce 열기 \u00b7 v 상세 \u00b7 n 새로 시작 \u00b7 d 닫기 \u00b7 tab 구역 \u00b7 \u2190\u2192 이전 기록 \u00b7 esc 패널 닫기"
+    color: root.muted
+    font.family: root.sansFamily
+    font.pixelSize: root.fontCaption
     horizontalAlignment: Text.AlignHCenter
     wrapMode: Text.Wrap
     lineHeight: 1.25
   }
 
-  // Count pill for the hero: tonal wash of its state color; `quiet` is the
-  // low-key variant for the unverified count.
-  component SummaryPill: Rectangle {
-    id: pill
-    property int count: 0
-    property string word: ""
-    property color tone: Color.accent
-    property bool quiet: false
+  // Squircle button. `primary` is the plate itself (light plate, ink text);
+  // the secondary form is a monoline ring.
+  component PlateButton: Item {
+    id: btn
+    property string text: ""
+    property bool primary: false
+    signal clicked()
+    readonly property bool hot: btnArea.containsMouse
 
-    visible: count > 0
-    implicitWidth: pillText.implicitWidth + Style.spacing.lg * 2
-    implicitHeight: pillText.implicitHeight + Style.spacing.xs * 2
-    radius: Style.cornerRadius
-    color: quiet ? Style.normalFillFor(root.fg, Color.accent) : Util.alpha(tone, 0.16)
+    implicitWidth: btnLabel.implicitWidth + Style.spacing.xl * 2
+    implicitHeight: Style.space(24)
 
-    Text {
-      id: pillText
-      textFormat: Text.PlainText
-      anchors.centerIn: parent
-      text: pill.count + " " + pill.word
-      color: pill.quiet ? root.dim : pill.tone
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: !pill.quiet
-    }
-  }
-
-  // Row state: a soft pill for states that need eyes, a quiet tonal pill for
-  // `recent` (activity in the last minutes, process unverified: never
-  // animated), quiet text for idle and ended, nothing for unknown (the hero
-  // counts them as unverified and the details line names the missing
-  // evidence).
-  component StateChip: Rectangle {
-    id: chip
-    // Not `state`: that name is Item's own States property.
-    property string kind: "idle"
-    readonly property bool pill: root.isPillState(kind)
-    readonly property bool quietPill: kind === "recent"
-    readonly property bool padded: pill || quietPill
-    readonly property color tone: root.chipColor(kind)
-
-    visible: kind !== "unknown"
-    implicitWidth: chipText.implicitWidth + (padded ? Style.spacing.md * 2 : 0)
-    implicitHeight: chipText.implicitHeight + (padded ? Style.spacing.xxs * 2 : 0)
-    radius: Style.cornerRadius
-    color: pill ? Util.alpha(tone, kind === "ultrawork" ? 0.24 : 0.15)
-      : (quietPill ? Style.normalFillFor(root.fg, Color.accent) : "transparent")
-
-    Text {
-      id: chipText
-      textFormat: Text.PlainText
-      anchors.centerIn: parent
-      text: Model.stateLabel(chip.kind)
-      color: chip.pill ? chip.tone : root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: chip.pill
-    }
-  }
-
-  // One cell of the segmented filter. The moving thumb lives in `tabs`.
-  component SegmentTab: Item {
-    id: tab
-    property string which: "all"
-    readonly property bool active: root.filter === which
-
-    implicitHeight: tabLabel.implicitHeight + Style.spacing.xs * 2 + Style.spacing.xxs
-
-    Rectangle {
+    Shape {
+      id: btnPlate
       anchors.fill: parent
-      radius: Style.cornerRadius
-      color: tabHover.containsMouse && !tab.active ? Style.hoverFillFor(root.fg, Color.accent) : "transparent"
+      anchors.margins: btn.primary ? 0 : 0.5
+      preferredRendererType: Shape.CurveRenderer
 
-      Behavior on color {
-        enabled: !root.reduceMotion
-        ColorAnimation { duration: 120 }
+      ShapePath {
+        strokeWidth: btn.primary ? -1 : Style.spacing.hairline
+        strokeColor: Util.alpha(root.fg, btn.hot ? 0.7 : 0.4)
+        fillColor: btn.primary
+          ? (btnArea.pressed ? Util.alpha(root.plate, 0.8) : (btn.hot ? root.plate : Util.alpha(root.plate, 0.92)))
+          : (btnArea.pressed ? Util.alpha(root.fg, 0.14) : (btn.hot ? Util.alpha(root.fg, 0.08) : Util.alpha(root.fg, 0)))
+        PathSvg { path: Model.squirclePath(btnPlate.width, btnPlate.height) }
+
+        Behavior on fillColor {
+          enabled: !root.reduceMotion
+          ColorAnimation { duration: 140 }
+        }
       }
     }
 
     Text {
-      id: tabLabel
+      id: btnLabel
       textFormat: Text.PlainText
       anchors.centerIn: parent
-      text: Model.filterLabel(tab.which) + " " + root.countFor(tab.which)
-      color: tab.active ? root.fg : root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: tab.active
-
-      Behavior on color {
-        enabled: !root.reduceMotion
-        ColorAnimation { duration: 160 }
-      }
+      text: btn.text
+      color: btn.primary ? root.ink : root.fg
+      font.family: root.sansFamily
+      font.pixelSize: root.fontBody
+      font.weight: Font.Medium
     }
 
     MouseArea {
-      id: tabHover
+      id: btnArea
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: {
-        root.filter = tab.which
-        root.cursor = 0
-      }
+      onClicked: btn.clicked()
     }
   }
 
-  // Count label plus a segment bar: one segment per ledger item when the
-  // denominator is small enough to read, a plain ratio bar otherwise. The
-  // fill sweeps in when a row is selected or the panel opens.
-  component ProgressLine: Column {
+  // Ledger line: label, count, and one segment per item (a ratio bar when
+  // the denominator is too large to read).
+  component ProgressLine: Item {
     id: line
     property string label: ""
     property int done: 0
     property int total: 0
     property real ratio: 0
-    property real shown: ratio
+    property color tone: root.fg
     readonly property bool discrete: total > 0 && total <= 24
-    readonly property int lit: Math.round(Math.max(0, Math.min(1, shown)) * total)
+    readonly property int lit: Math.round(Math.max(0, Math.min(1, ratio)) * total)
 
-    spacing: Style.spacing.xs
+    implicitHeight: Math.max(lineLabel.implicitHeight, Style.space(12))
 
-    function replay() {
-      if (root.reduceMotion || !visible) return
-      fillAnim.restart()
-    }
-
-    Behavior on shown {
-      enabled: !root.reduceMotion && !fillAnim.running
-      NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
-    }
-
-    NumberAnimation {
-      id: fillAnim
-      target: line
-      property: "shown"
-      from: 0
-      to: line.ratio
-      duration: 560
-      easing.type: Easing.OutCubic
+    Text {
+      id: lineLabel
+      textFormat: Text.PlainText
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(28)
+      text: line.label
+      color: root.muted
+      font.family: root.sansFamily
+      font.pixelSize: root.fontCaption
     }
 
     Text {
+      id: lineCount
       textFormat: Text.PlainText
-      width: parent.width
-      text: line.label
+      anchors.left: lineLabel.right
+      anchors.leftMargin: Style.spacing.sm
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.max(implicitWidth, Style.space(32))
+      text: line.done + "/" + line.total
       color: root.fg
       font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
+      font.pixelSize: root.fontCaption
     }
 
     Item {
-      width: parent.width
-      implicitHeight: Style.spacing.sm
+      id: track
+      anchors.left: lineCount.right
+      anchors.leftMargin: Style.spacing.lg
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      height: Style.spacing.sm
 
       Row {
         visible: line.discrete
@@ -1041,10 +545,10 @@ Column {
 
           Rectangle {
             required property int index
-            width: Math.max(1, (line.width - Style.spacing.xxs * (line.total - 1)) / line.total)
-            height: Style.spacing.sm
-            radius: Style.cornerRadius
-            color: index < line.lit ? Color.accent : root.track
+            width: Math.max(1, (track.width - Style.spacing.xxs * (line.total - 1)) / line.total)
+            height: track.height
+            radius: Style.spacing.hairline
+            color: index < line.lit ? line.tone : Util.alpha(root.fg, 0.16)
 
             Behavior on color {
               enabled: !root.reduceMotion
@@ -1057,32 +561,375 @@ Column {
       Rectangle {
         visible: !line.discrete
         anchors.fill: parent
-        radius: Style.cornerRadius
-        color: root.track
+        radius: Style.spacing.hairline
+        color: Util.alpha(root.fg, 0.16)
 
         Rectangle {
           anchors.left: parent.left
           anchors.top: parent.top
           anchors.bottom: parent.bottom
-          width: parent.width * Math.max(0, Math.min(1, line.shown))
-          radius: Style.cornerRadius
-          color: Color.accent
+          width: parent.width * Math.max(0, Math.min(1, line.ratio))
+          radius: parent.radius
+          color: line.tone
+
+          Behavior on width {
+            enabled: !root.reduceMotion
+            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+          }
         }
       }
     }
   }
 
-  // Tonal capsule: no rest border, a quiet fill, the kit's hover/pressed
-  // states on top. `primary` tints the one action worth reaching for first.
-  component ActionCapsule: Button {
-    property bool primary: false
-    bordered: false
-    foreground: primary ? Color.accent : root.fg
-    accent: Color.accent
-    background: primary ? Util.alpha(Color.accent, Style.hoverFillAlpha) : Util.alpha(root.fg, Style.hoverFillAlpha)
-    fontFamily: root.fontFamily
-    fontSize: Style.font.caption
-    verticalPadding: Style.spacing.xs
-    horizontalPadding: Style.spacing.lg
+  // One session: its section header when it opens a section, then the card.
+  component SessionCard: Column {
+    id: card
+    required property var modelData
+    required property int index
+    property int indexOffset: 0
+    readonly property bool isCard: true
+    readonly property int flatIndex: index + indexOffset
+    readonly property var session: modelData.session
+    readonly property string rowState: modelData.state
+    readonly property string face: modelData.face
+    readonly property bool inHistory: modelData.section === "history"
+    readonly property bool isSelected: flatIndex === root.selectedIndex
+    readonly property var ledger: Model.progress(session)
+    // 열기 only exists when it can act: focus a proven window or resume an
+    // ended session. Otherwise the card says why.
+    readonly property var plan: root.panel
+      ? Model.openCommand(session, root.panel.openOptions)
+      : ({ kind: "blocked", argv: null, reason: "" })
+    readonly property bool canOpen: plan.kind === "focus" || plan.kind === "resume"
+    readonly property string notice: root.openNotices[session.id] !== undefined
+      ? Model.reasonKo(root.openNotices[session.id])
+      : (plan.kind === "blocked" ? Model.reasonKo(plan.reason) : "")
+    readonly property bool hasActions: canOpen || session.sessionPath !== "" || rowState === "error"
+    readonly property bool showsView: root.collector && root.collector.viewPath !== "" && root.collector.viewPath === session.sessionPath
+      && (root.collector.viewing || root.collector.viewOutput !== "" || root.collector.viewError !== "")
+    readonly property color tone: root.toneFor(Model.accentFor(face), root.muted)
+    // Height once the fold has settled (only the selected card is open).
+    readonly property real settledHeight: surface.height - expansion.height + (isSelected ? details.implicitHeight : 0)
+
+    width: parent.width
+    spacing: 0
+
+    function syncHighlight() {
+      if (!isSelected) return
+      var p = surface.mapToItem(rowArea, 0, 0)
+      root.highlightY = p.y
+      root.highlightHeight = surface.height
+      root.selectedTop = rowArea.y + p.y
+      root.selectedBottom = root.selectedTop + settledHeight
+    }
+
+    onIsSelectedChanged: syncHighlight()
+    onYChanged: syncHighlight()
+    onHeightChanged: syncHighlight()
+    Component.onCompleted: syncHighlight()
+
+    // Section header: title, count, hairline.
+    Item {
+      visible: card.modelData.first && !card.inHistory
+      width: parent.width
+      implicitHeight: sectionRow.implicitHeight + Style.spacing.sm + (card.flatIndex === 0 ? 0 : Style.spacing.xl)
+
+      Row {
+        id: sectionRow
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.spacing.sm
+        spacing: Style.spacing.md
+
+        Text {
+          id: sectionTitle
+          textFormat: Text.PlainText
+          anchors.verticalCenter: parent.verticalCenter
+          text: card.modelData.title
+          color: root.muted
+          font.family: root.sansFamily
+          font.pixelSize: root.fontCaption
+          font.weight: Font.Medium
+        }
+
+        Text {
+          id: sectionCount
+          textFormat: Text.PlainText
+          anchors.verticalCenter: parent.verticalCenter
+          text: card.modelData.count
+          color: root.muted
+          font.family: root.fontFamily
+          font.pixelSize: root.fontCaption
+        }
+
+        Rectangle {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Math.max(0, sectionRow.width - sectionTitle.width - sectionCount.width - sectionRow.spacing * 2)
+          height: Style.spacing.hairline
+          color: Util.alpha(root.fg, 0.12)
+        }
+      }
+    }
+
+    Item {
+      id: surface
+      width: parent.width
+      height: body.implicitHeight + Style.spacing.lg * 2
+
+      // Rest and hover wash; the selection plate slides in from the list.
+      Shape {
+        id: wash
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+        opacity: card.isSelected ? 0 : 1
+        visible: opacity > 0
+
+        ShapePath {
+          strokeWidth: -1
+          fillColor: cardArea.containsMouse ? Style.hoverFillFor(root.fg, Color.accent) : Style.normalFillFor(root.fg, Color.accent)
+          PathSvg { path: Model.squirclePath(wash.width, wash.height) }
+
+          Behavior on fillColor {
+            enabled: !root.reduceMotion
+            ColorAnimation { duration: 140 }
+          }
+        }
+
+        Behavior on opacity {
+          enabled: !root.reduceMotion
+          NumberAnimation { duration: 160 }
+        }
+      }
+
+      MouseArea {
+        id: cardArea
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.cursor = card.flatIndex
+        onDoubleClicked: {
+          root.cursor = card.flatIndex
+          root.activate()
+        }
+      }
+
+      Column {
+        id: body
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: Style.spacing.lg
+        spacing: Style.spacing.sm
+        opacity: card.inHistory ? 0.7 : 1
+
+        Row {
+          id: head
+          width: parent.width
+          spacing: Style.spacing.lg
+
+          Cat {
+            id: faceIcon
+            y: card.isSelected ? 0 : Math.max(0, Math.round((textBlock.implicitHeight - height) / 2))
+            size: Style.space(24)
+            inset: 0
+            face: card.face
+            glow: card.face === "ultrawork"
+            reduceMotion: true
+            fontFamily: root.fontFamily
+          }
+
+          Column {
+            id: textBlock
+            width: head.width - faceIcon.width - head.spacing
+            spacing: Style.spacing.xxs
+
+            // The selected title wraps to three lines; others stay on one.
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: card.session.title
+              color: root.fg
+              font.family: root.sansFamily
+              font.pixelSize: root.fontBody
+              font.weight: Font.Medium
+              elide: Text.ElideRight
+              wrapMode: card.isSelected ? Text.Wrap : Text.NoWrap
+              maximumLineCount: card.isSelected ? 3 : 1
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.spacing.md
+
+              Text {
+                id: faceTag
+                textFormat: Text.PlainText
+                text: Model.textFace(card.face)
+                color: card.tone
+                font.family: root.fontFamily
+                font.pixelSize: root.fontCaption
+                font.weight: Font.Medium
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width - faceTag.width - parent.spacing
+                text: root.metaLine(card.session)
+                color: root.muted
+                font.family: root.fontFamily
+                font.pixelSize: root.fontCaption
+                elide: Text.ElideRight
+              }
+            }
+          }
+        }
+
+        // Ledger values only; nothing shows without a denominator.
+        Column {
+          id: ledgerBlock
+          visible: !!card.ledger.todo || !!card.ledger.ulw
+          width: parent.width
+          leftPadding: faceIcon.width + head.spacing
+          spacing: Style.spacing.xs
+
+          ProgressLine {
+            visible: !!card.ledger.todo
+            width: ledgerBlock.width - ledgerBlock.leftPadding
+            label: "할 일"
+            done: card.ledger.todo ? card.ledger.todo.completed : 0
+            total: card.ledger.todo ? card.ledger.todo.total : 0
+            ratio: card.ledger.todo ? card.ledger.todo.ratio : 0
+            tone: root.plate
+          }
+
+          ProgressLine {
+            visible: !!card.ledger.ulw
+            width: ledgerBlock.width - ledgerBlock.leftPadding
+            label: "검증"
+            done: card.ledger.ulw ? card.ledger.ulw.passed : 0
+            total: card.ledger.ulw ? card.ledger.ulw.total : 0
+            ratio: card.ledger.ulw ? card.ledger.ulw.ratio : 0
+            tone: Color.accent
+          }
+        }
+
+        // Selected card only: why 열기 cannot act, the actions, the details.
+        Item {
+          id: expansion
+          width: parent.width
+          height: card.isSelected ? details.implicitHeight : 0
+          clip: true
+
+          Behavior on height {
+            enabled: !root.reduceMotion
+            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+          }
+
+          Column {
+            id: details
+            width: parent.width
+            leftPadding: faceIcon.width + head.spacing
+            topPadding: Style.spacing.xs
+            spacing: Style.spacing.lg
+            opacity: card.isSelected ? 1 : 0
+
+            readonly property real innerWidth: width - leftPadding
+
+            Behavior on opacity {
+              enabled: !root.reduceMotion
+              NumberAnimation { duration: 160 }
+            }
+
+            Text {
+              visible: text !== ""
+              textFormat: Text.PlainText
+              width: details.innerWidth
+              text: card.notice
+              color: Util.alpha(root.fg, 0.8)
+              font.family: root.sansFamily
+              font.pixelSize: root.fontCaption
+              wrapMode: Text.Wrap
+            }
+
+            Row {
+              visible: card.hasActions
+              spacing: Style.spacing.md
+
+              PlateButton {
+                visible: card.canOpen
+                primary: true
+                text: "열기"
+                onClicked: root.openSession(card.session)
+              }
+
+              PlateButton {
+                visible: card.session.sessionPath !== ""
+                text: "상세"
+                onClicked: root.viewSession(card.session)
+              }
+
+              PlateButton {
+                visible: card.rowState === "error"
+                text: "닫기"
+                onClicked: if (root.panel) root.panel.dismiss(card.session.id)
+              }
+            }
+
+            // Collector summary of the session file (id, title, directory,
+            // activity, runtime, ledgers) — not a transcript.
+            Item {
+              visible: card.showsView
+              width: details.innerWidth
+              implicitHeight: viewColumn.implicitHeight + Style.spacing.lg * 2
+
+              Shape {
+                id: viewPlate
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                  strokeWidth: -1
+                  fillColor: Style.normalFillFor(root.fg, Color.accent)
+                  PathSvg { path: Model.squirclePath(viewPlate.width, viewPlate.height) }
+                }
+              }
+
+              Column {
+                id: viewColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: Style.spacing.lg
+                spacing: Style.spacing.xs
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: "상세"
+                  color: root.muted
+                  font.family: root.sansFamily
+                  font.pixelSize: root.fontCaption
+                  font.weight: Font.Medium
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  text: root.collector && root.collector.viewing
+                    ? "불러오는 중이에요\u2026"
+                    : (root.collector && root.collector.viewOutput !== ""
+                      ? root.collector.viewOutput
+                      : (root.collector && root.collector.viewError !== "" ? "상세 정보가 없어요." : ""))
+                  color: root.fg
+                  font.family: root.fontFamily
+                  font.pixelSize: root.fontCaption
+                  wrapMode: Text.WrapAnywhere
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

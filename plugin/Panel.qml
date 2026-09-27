@@ -6,10 +6,11 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// OmO bar widget: a compact cat cell with the active session count and a
-// keyboard-driven session panel. Same shape as plugins/agents/Panel.qml, so
-// shell summon/hide/toggle and the bar's popout coordinator treat it like a
-// first-party panel widget.
+// OmO bar widget (docs/DESIGN-v3.md): the face cell — a 20 px squircle-plate
+// face, a mono count badge and, on a horizontal bar, one line of Korean copy
+// while a session needs eyes — plus the keyboard-driven session panel. Same
+// shape as plugins/agents/Panel.qml, so shell summon/hide/toggle and the
+// bar's popout coordinator treat it like a first-party panel widget.
 Panel {
   id: root
   moduleName: "io.github.tmdgusya.omo"
@@ -18,54 +19,66 @@ Panel {
 
   readonly property color foreground: bar ? bar.barForeground : Color.foreground
   readonly property color panelForeground: Color.popups.text
-  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  // Amber: the bar's attention color, "a human is needed".
+  readonly property color urgent: bar ? bar.urgent : Color.bar.active
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property bool vertical: bar ? bar.vertical : false
+  readonly property string barPosition: bar ? bar.position : "top"
   readonly property int barSize: bar ? bar.barSize : Style.bar.sizeHorizontal
   readonly property bool reduceMotion: Model.settingBool(settings, "reduceMotion", false)
   readonly property bool showCount: Model.settingBool(settings, "showCount", true)
   readonly property string senpiPath: Model.settingString(settings, "senpiPath") || "senpi"
-  // What starts a session (Launch, Open->resume): the launcher setting, else
-  // the senpi executable, else plain `senpi` on the shell PATH.
+  // What starts a session (새로 시작, 열기 -> resume): the launcher setting,
+  // else the senpi executable, else plain `senpi` on the shell PATH.
   readonly property string launcherPath: Model.settingString(settings, "launcherPath") || senpiPath
   readonly property bool trackingInstalled: Model.settingBool(settings, "trackingInstalled", false)
   readonly property string agentDir: Model.settingString(settings, "agentDir")
     || Quickshell.env("SENPI_CODING_AGENT_DIR") || Quickshell.env("OMO_CODING_AGENT_DIR")
     || Quickshell.env("HOME") + "/.omo/agent"
+  // Bundled next to this file; loaded into every session the widget launches.
+  readonly property string extensionPath: Qt.resolvedUrl("omo-status.ts").toString().replace(/^file:\/\//, "")
+  // What 열기 needs to decide between focus, resume and "cannot".
+  readonly property var openOptions: ({
+    extensionPath: extensionPath,
+    launcherPath: launcherPath,
+    agentDir: agentDir,
+    trackingInstalled: trackingInstalled
+  })
 
   property double nowMs: Date.now()
   property var dismissed: ({})
   property int tooltipIndex: -1
   property string launchNotice: ""
 
-  // Bundled next to this file; loaded into every session the widget launches.
-  readonly property string extensionPath: Qt.resolvedUrl("omo-status.ts").toString().replace(/^file:\/\//, "")
-
   readonly property var summary: Model.aggregate(collector.sessions, nowMs, dismissed)
-  readonly property string face: collector.stale ? "idle" : summary.state
+  readonly property string face: collector.stale ? "idle" : Model.faceFor(summary.state, collector.sessions.length)
   readonly property bool catRunning: !collector.stale && summary.animated
   readonly property bool catGlow: !collector.stale && summary.glow
-  readonly property string caption: showCount && !collector.stale ? summary.caption : ""
+  readonly property int count: showCount && !collector.stale ? Model.badgeCount(summary) : 0
+  readonly property string copy: vertical || collector.stale ? "" : Model.barCopy(face)
 
-  // Fixed cell geometry so the bar never reflows: vertical 28x40 (cat cell on
-  // top, caption slot below), horizontal 40x26 (caption slot to the right).
-  readonly property int cell: barSize
-  readonly property int captionSlot: vertical ? Style.spacing.xxl : Style.spacing.xxxl
-  readonly property int characterSize: Math.round(barSize * 0.86)
-  readonly property real openPanelIndicatorWidth: cell
-  readonly property real openPanelIndicatorHeight: cell
+  // Cell geometry on the 4 px grid: a 20 px face box inset so the cell spans
+  // the bar (6 px at 32, 8 px at 36); badge and copy run along the bar.
+  readonly property int faceSize: Style.space(20)
+  readonly property int cellInset: Math.max(Style.spacing.xxs, Math.floor((barSize - faceSize) / 2))
+  readonly property real openPanelIndicatorWidth: barSize
+  readonly property real openPanelIndicatorHeight: barSize
 
-  implicitWidth: vertical ? cell : cell + captionSlot
-  implicitHeight: vertical ? cell + captionSlot : cell
+  implicitWidth: vertical ? barSize : cat.implicitWidth
+  implicitHeight: vertical ? cat.implicitHeight : barSize
+
+  // The list's cursor and the key dispatcher, for shell IPC and harnesses.
+  property alias sessionList: list
+  property alias keyCatcherItem: keyCatcher
 
   readonly property string tooltipText: {
     if (launchNotice !== "") return launchNotice
     if (tooltipIndex >= 0 && tooltipIndex < collector.sessions.length) {
       var session = collector.sessions[tooltipIndex]
-      return Model.elide(session.title, 48) + " \u00b7 " + Model.stateLabel(Model.effectiveState(session, nowMs, dismissed))
+      return Model.elide(session.title, 48) + " \u00b7 " + Model.stateLabelKo(Model.effectiveState(session, nowMs, dismissed))
     }
-    if (collector.stale) return "OmO \u00b7 session data unavailable \u00b7 " + collector.staleReason
-    return summary.tooltip
+    if (collector.stale) return "OmO \u00b7 세션 정보를 읽지 못했어요 \u00b7 " + collector.staleReason
+    return Model.summaryLine(summary)
   }
 
   function refresh() {
@@ -80,7 +93,7 @@ Panel {
   function launch(cwd) {
     var command = Model.launchCommand(cwd, root.extensionPath, root.launcherPath, root.agentDir, root.trackingInstalled)
     if (!command) {
-      launchNotice = "OmO: launcherPath must be 'senpi', 'omo', or an absolute executable path"
+      launchNotice = "OmO: launcherPath는 senpi, omo 또는 절대 경로여야 해요."
       return false
     }
     launchNotice = ""
@@ -89,18 +102,12 @@ Panel {
     return true
   }
 
-  // Open is the one primary action: focus a verified window, resume an ended
-  // session, or say why neither is possible on the row itself. Returns false
-  // only while the Model API is missing so the list can fall back; otherwise
-  // returns the result text used by both the panel and focus(id) IPC.
+  // 열기 is the one primary action: focus a verified window, resume an ended
+  // session, or say why neither is possible on the card itself. Returns the
+  // result text used by both the panel and focus(id) IPC.
   function openSession(session) {
-    if (!session || typeof Model.openCommand !== "function") return false
-    var result = Model.openCommand(session, {
-      extensionPath: root.extensionPath,
-      launcherPath: root.launcherPath,
-      agentDir: root.agentDir,
-      trackingInstalled: root.trackingInstalled
-    })
+    if (!session) return false
+    var result = Model.openCommand(session, root.openOptions)
     var kind = result ? String(result.kind || "") : ""
     if ((kind === "focus" || kind === "resume") && result.argv && result.argv.length > 0) {
       list.clearOpenNotice(session.id)
@@ -121,14 +128,6 @@ Panel {
       if (String(session.id || "") === sessionId) return String(root.openSession(session))
     }
     return "session not found"
-  }
-
-  function focusSession(session) {
-    var command = Model.focusCommand(session ? session.focusAddress : "")
-    if (!command) return false
-    Quickshell.execDetached(command)
-    root.close()
-    return true
   }
 
   function dismiss(id) {
@@ -158,21 +157,32 @@ Panel {
     } else {
       contentReveal.stop()
       keyCatcher.opacity = 1
+      contentRise.x = 0
       contentRise.y = 0
       collector.clearView()
     }
   }
 
-  // Content settles into the card: a short fade with a rise, on top of the
-  // kit's own card fade. Skipped entirely under reduceMotion.
+  // Content enters from the bar edge: it drops down under a top bar and
+  // flies out beside a vertical one, on top of the kit's own card fade.
+  // Under reduceMotion the kit fade is the whole transition.
+  readonly property real revealOffset: Style.space(8)
+
   ParallelAnimation {
     id: contentReveal
     NumberAnimation { target: keyCatcher; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
-    NumberAnimation { target: contentRise; property: "y"; from: Style.space(8); to: 0; duration: 220; easing.type: Easing.OutCubic }
+    NumberAnimation {
+      target: contentRise
+      property: root.vertical ? "x" : "y"
+      from: root.barPosition === "bottom" || root.barPosition === "right" ? root.revealOffset : -root.revealOffset
+      to: 0
+      duration: 220
+      easing.type: Easing.OutCubic
+    }
   }
 
-  // Fold handling: rows below the viewport are counted for the affordance,
-  // and a selection change scrolls the selected row (with its details) fully
+  // Fold handling: cards below the viewport are counted for the affordance,
+  // and a selection change scrolls the selected card (with its actions) fully
   // into view instead of leaving it cut at the card edge.
   readonly property int rowsBelowFold: list.rowsBelow(panelFlick.contentY + panelFlick.height, list.implicitHeight)
   readonly property int foldTop: Style.space(28)
@@ -192,14 +202,12 @@ Panel {
 
   function ensureSelectedVisible() {
     if (!panelFlick.interactive) return
-    // Clear the fade zones, not just the row: the selected row must stay
-    // fully legible, capsules included.
     var top = list.selectedTop - root.foldTop
     var bottom = list.selectedBottom + root.foldBottom
     var target = panelFlick.contentY
     if (bottom > target + panelFlick.height) target = bottom - panelFlick.height
     if (top < target) target = top
-    // The first row brings the hero back with it.
+    // The first card brings the header back with it.
     if (list.selectedIndex === 0) target = 0
     if (Math.abs(target - panelFlick.contentY) >= 1) scrollTo(target)
   }
@@ -212,7 +220,7 @@ Panel {
     easing.type: Easing.OutCubic
   }
 
-  // Twice: once right away, once after the details have finished expanding.
+  // Twice: once right away, once after the card has finished expanding.
   Connections {
     target: list
     function onSelectedIndexChanged() {
@@ -254,6 +262,7 @@ Panel {
     function status(): string {
       return JSON.stringify({
         face: root.face,
+        state: root.summary.state,
         active: root.summary.active,
         sessions: collector.sessions.length,
         stale: collector.stale,
@@ -280,44 +289,26 @@ Panel {
     onWheelMoved: function(delta) { if (!root.opened) root.cycleTooltip(delta) }
     onTooltipHoveredChanged: if (!tooltipHovered) root.tooltipIndex = -1
 
-    Item {
-      id: cellArea
-      width: root.cell
-      height: root.cell
+    Cat {
+      id: cat
       anchors.top: parent.top
       anchors.left: parent.left
-
-      Cat {
-        id: cat
-        anchors.centerIn: parent
-        size: root.characterSize
-        face: root.face
-        stale: collector.stale
-        running: root.catRunning
-        glow: root.catGlow
-        reduceMotion: root.reduceMotion
-        accent: Color.accent
-        attention: root.urgent
-        failure: Color.urgent
-      }
-    }
-
-    Text {
-      id: captionLabel
-      textFormat: Text.PlainText
-      visible: root.caption !== ""
-      anchors.top: root.vertical ? cellArea.bottom : parent.top
-      anchors.left: root.vertical ? parent.left : cellArea.right
-      width: root.vertical ? root.cell : root.captionSlot
-      height: root.vertical ? root.captionSlot : root.cell
-      text: root.caption
-      color: root.summary.waiting > 0 ? root.urgent : root.foreground
-      opacity: root.summary.waiting > 0 ? 1 : 0.7
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      renderType: Text.NativeRendering
-      horizontalAlignment: Text.AlignHCenter
-      verticalAlignment: Text.AlignVCenter
+      size: root.faceSize
+      inset: root.cellInset
+      vertical: root.vertical
+      face: root.face
+      running: root.catRunning
+      glow: root.catGlow
+      stale: collector.stale
+      reduceMotion: root.reduceMotion
+      hovered: button.tooltipHovered || root.opened
+      count: root.count
+      copy: root.copy
+      foreground: root.foreground
+      accent: Color.accent
+      attention: root.urgent
+      failure: Color.urgent
+      fontFamily: root.fontFamily
     }
   }
 
@@ -334,18 +325,6 @@ Panel {
     // in [popups] still wins.
     borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Style.spacing.hairline)
 
-    // Inner sheen: a faint moonlight wash from the top edge, drawn inside the
-    // hairline (the negative margin spans the card padding, not the border).
-    Rectangle {
-      anchors.fill: parent
-      anchors.margins: -panel.padding
-      radius: Style.cornerRadius
-      gradient: Gradient {
-        GradientStop { position: 0.0; color: Util.alpha(Color.accent, 0.08) }
-        GradientStop { position: 0.38; color: Util.alpha(Color.accent, 0.0) }
-      }
-    }
-
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
@@ -353,11 +332,12 @@ Panel {
 
       onMoveRequested: function(dx, dy) {
         if (dy !== 0) list.moveCursor(dy)
-        if (dx !== 0) list.cycleFilter(dx)
+        if (dx !== 0) list.toggleHistory()
       }
       onActivateRequested: list.activate()
       onCloseRequested: root.close()
-      onTabRequested: function(direction) { list.cycleFilter(direction) }
+      onDeleteRequested: list.dismissSelected()
+      onTabRequested: function(direction) { list.jumpSection(direction) }
       onTextKey: function(text) {
         if (text === "v" || text === "V") list.viewSelected()
         else if (text === "n" || text === "N") root.launch(list.selectedCwd())
@@ -416,7 +396,7 @@ Panel {
         gradient: Gradient {
           GradientStop { position: 0.0; color: Util.alpha(Color.popups.background, 0) }
           // Solid card from just above the fold pill down: the pill must
-          // never composite over half-faded row text.
+          // never composite over half-faded card text.
           GradientStop { position: Math.max(0, 1 - (foldHint.implicitHeight + foldHint.anchors.bottomMargin + Style.spacing.sm) / root.foldBottom); color: Color.popups.background }
           GradientStop { position: 1.0; color: Color.popups.background }
         }
@@ -427,7 +407,7 @@ Panel {
         }
       }
 
-      // Scroll affordance: how many rows wait below the fold; click pages down.
+      // Scroll affordance: how many cards wait below the fold; click pages down.
       Rectangle {
         id: foldHint
         anchors.horizontalCenter: panelFlick.horizontalCenter
@@ -437,18 +417,18 @@ Panel {
         opacity: bottomFade.opacity
         implicitWidth: foldText.implicitWidth + Style.spacing.lg * 2
         implicitHeight: foldText.implicitHeight + Style.spacing.xs * 2
-        radius: Style.cornerRadius
+        radius: height / 2
         color: Style.selectedFillFor(root.panelForeground, Color.accent)
 
         Text {
           id: foldText
           textFormat: Text.PlainText
           anchors.centerIn: parent
-          text: "\u2193 " + root.rowsBelowFold + " more"
-          color: Qt.darker(root.panelForeground, 1.25)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
+          text: "\u2193 " + root.rowsBelowFold + "개 더"
+          color: root.panelForeground
+          font.family: Model.TOKENS.sansFamily
+          font.pixelSize: Style.font.bodySmall
+          font.weight: Font.Medium
         }
 
         MouseArea {

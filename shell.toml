@@ -1,7 +1,7 @@
 # OmO Nightsea - Omarchy shell surfaces.
 # Mirrors /usr/share/omarchy/default/themed/shell.toml.tpl key for key; only
-# color/alpha tokens change. Sizes, spacing and the type scale stay stock so
-# the bar keeps its 28px vertical width and nothing personal is overridden.
+# color/alpha tokens change. The bar follows DESIGN-v3's 32/36 geometry while
+# the stock 12px type root and spacing scale preserve the shell's 4px rhythm.
 
 [bar]
 # Fallback when the bar is not transparent; ink floor melts into the sea.
@@ -11,8 +11,8 @@ text             = "#DCE7E6"
 # Attention = "a human is needed" (butter), kept apart from failure (coral).
 active           = "#F2D38B"
 scale-with-font  = true
-size-horizontal  = 26
-size-vertical    = 28
+size-horizontal  = 32
+size-vertical    = 36
 
 [hyprland]
 # Moonlight edge: aqua -> plate, same gradient colors.toml hands Hyprland.
@@ -72,12 +72,12 @@ border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [notifications]
-background       = "#0B1B1D"
+background       = "#041617"
 background-alpha = 1.0
-text             = "#DCE7E6"
-border           = "hyprland.active-border"
+text             = "#F4F4F4"
+border           = "#F4F4F4"
 border-alpha     = 1.0
-countdown        = "#7FE0D4"
+countdown        = "#5F7A7B"
 
 [launcher]
 background                = "#0B1B1D"
@@ -122,15 +122,15 @@ accent           = "#7FE0D4"
 [lock]
 background       = "#041617"
 background-alpha = 0.8
-text             = "#DCE7E6"
+text             = "#F4F4F4"
 placeholder      = "#A8BFBF"
 text-error       = "#F08A8A"
-border           = "hyprland.active-border"
-border-active    = "hyprland.active-border"
+border           = "#5F7A7B"
+border-active    = "#F4F4F4"
 border-error     = "#F08A8A"
 border-alpha     = 1.0
-selection        = "#7FE0D4"
-selection-alpha  = 0.45
+selection        = "#F4F4F4"
+selection-alpha  = 0.25
 
 [image-picker]
 scrim                   = "#041617"

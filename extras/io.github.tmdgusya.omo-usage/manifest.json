@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.tmdgusya.omo-usage",
+  "name": "OmO Provider Usage",
+  "version": "1.0.0",
+  "author": "tmdgusya",
+  "description": "OmO-connected provider quota and local session usage",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Usage.qml"
+  },
+  "barWidget": {
+    "displayName": "OmO Provider Usage",
+    "description": "Connected provider quota, reset time, and OmO local token usage",
+    "category": "AI",
+    "aliases": [
+      "omo-usage",
+      "provider-usage"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 300
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 60,
+        "max": 3600,
+        "step": 60,
+        "defaultValue": 300
+      }
+    ]
+  }
+}
