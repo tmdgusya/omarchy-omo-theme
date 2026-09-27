@@ -27,9 +27,14 @@ view. Click its cat icon to see each provider's quota and reset time separately
 from locally recorded OmO session tokens. The bar shows the provider count
 and the highest available quota percentage, not an average.
 
-Claude and Codex quota queries use the account selected by OmO. Providers
-without a supported quota endpoint display unavailable rather than an
-estimated percentage. Local token totals are session history, not billing.
+Claude, Codex, Kimi and Z.AI use provider-reported quota windows. Every linked
+account has its own row; blocked accounts stay visible with their status.
+Account pins are not changed. The bar summarizes the highest available
+percentage across accounts. Xiaomi quota requires a console login cookie;
+the referenced Devin/Windsurf quota endpoint requires a Codeium key rather
+than the linked Devin credential. Missing credentials are explained rather
+than replaced with estimated percentages. Local token totals are
+provider-wide session history, not per-account billing.
 The installer records absolute Bun and Senpi paths so collection also works
 outside a terminal's PATH.
 

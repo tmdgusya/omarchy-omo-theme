@@ -37,9 +37,13 @@ function highestUsage(providers) {
   var list = Array.isArray(providers) ? providers : []
   var highest = null
   for (var i = 0; i < list.length; i++) {
-    var limit = primaryLimit(list[i])
-    if (limit && (!highest || Number(limit.usedPercent) > Number(highest.usedPercent)))
-      highest = limit
+    var accounts = list[i].accountQuotas || []
+    var candidates = accounts.length > 0 ? accounts : [list[i]]
+    for (var j = 0; j < candidates.length; j++) {
+      var limit = primaryLimit(candidates[j])
+      if (limit && (!highest || Number(limit.usedPercent) > Number(highest.usedPercent)))
+        highest = limit
+    }
   }
   return highest
 }
@@ -83,6 +87,14 @@ function quotaUnavailableText(provider) {
   if (reason === "auth_unavailable") return "Check provider authentication."
   if (reason === "backend_unavailable") return "Quota is unavailable from this provider right now."
   if (reason === "rate_limited") return "Quota lookup is rate-limited. Try again later."
+  if (reason === "requires_console_cookie") return "Quota requires a console login; the linked API key is not enough."
+  if (reason === "requires_codeium_api_key") return "This quota endpoint requires a Codeium key, not the linked Devin credential."
+  if (reason === "missing_oauth_headers") return "The linked account did not provide quota authentication."
+  if (reason === "missing_api_key") return "No API key is available for this quota request."
+  if (reason === "auth_rejected") return "The provider rejected the quota request credentials."
+  if (reason === "no_limits" || reason === "no_token_limits") return "The provider returned no quota windows."
+  if (reason === "not_implemented") return "Quota collection is not integrated for this provider yet."
+  if (reason === "request_failed") return "The quota request failed. Try refreshing."
   return "Quota is unavailable right now."
 }
 

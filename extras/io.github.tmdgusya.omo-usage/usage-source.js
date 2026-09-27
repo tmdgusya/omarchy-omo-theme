@@ -1,8 +1,30 @@
 #!/usr/bin/env bun
 
-import { realpath } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
+import {
+  parseAnthropicUsage,
+  parseCodexUsage,
+  parseDevinUsage,
+  parseKimiUsage,
+  parseZaiUsage,
+} from "./quota-adapters.js";
+import {
+  anthropicUsageProviderSettings,
+  nativeAnthropicUsage,
+  packageRoot,
+  readAnthropicUsage,
+} from "./senpi-usage.js";
+
+export {
+  parseAnthropicUsage,
+  parseCodexUsage,
+  parseDevinUsage,
+  parseKimiUsage,
+  parseZaiUsage,
+  anthropicUsageProviderSettings,
+  readAnthropicUsage,
+};
 
 const PROVIDER_NAMES = {
   "anthropic-subscription": "Claude",
@@ -14,86 +36,9 @@ const PROVIDER_NAMES = {
 };
 
 function finite(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function resetAtMs(value) {
-  const numeric = finite(value);
-  if (numeric !== null) return numeric < 1e12 ? numeric * 1000 : numeric;
-  const parsed = Date.parse(String(value ?? ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function codexWindow(value) {
-  if (!value || typeof value !== "object") return null;
-  const usedPercent = finite(value.used_percent);
-  const seconds = finite(value.limit_window_seconds);
-  if (usedPercent === null) return null;
-  const label = seconds === 604800
-    ? "주간 7일"
-    : seconds === 18000
-      ? "세션 5시간"
-      : seconds
-        ? `${Math.round(seconds / 3600)}시간`
-        : "사용 한도";
-  return {
-    label,
-    usedPercent: Math.max(0, Math.min(100, usedPercent)),
-    resetAtMs: resetAtMs(value.reset_at),
-  };
-}
-
-export function parseCodexUsage(payload) {
-  const rateLimit = payload?.rate_limit;
-  if (!rateLimit || typeof rateLimit !== "object") return [];
-  return [codexWindow(rateLimit.primary_window), codexWindow(rateLimit.secondary_window)].filter(Boolean);
-}
-
-function anthropicWindow(label, value, percentScale) {
-  if (!value || typeof value !== "object") return null;
-  const raw = finite(value.utilization ?? value.percent);
-  if (raw === null) return null;
-  const usedPercent = percentScale || raw > 1 ? raw : raw * 100;
-  return {
-    label,
-    usedPercent: Math.max(0, Math.min(100, usedPercent)),
-    resetAtMs: resetAtMs(value.resets_at),
-  };
-}
-
-export function parseAnthropicUsage(payload) {
-  if (!payload || typeof payload !== "object") return [];
-  const weekly = payload.seven_day_oauth_apps ?? payload.seven_day;
-  const raw = [payload.five_hour?.utilization, weekly?.utilization];
-  if (Array.isArray(payload.limits)) {
-    for (const entry of payload.limits) raw.push(entry?.percent);
-  }
-  const percentScale = raw.some(value => (finite(value) ?? -1) >= 1);
-  const limits = [
-    anthropicWindow("세션 5시간", payload.five_hour, percentScale),
-    anthropicWindow("주간 7일", weekly, percentScale),
-  ].filter(Boolean);
-  for (const entry of Array.isArray(payload.limits) ? payload.limits : []) {
-    const model = entry?.scope?.model;
-    const name = String(model?.display_name ?? model?.id ?? "").trim();
-    if (!name) continue;
-    const kind = String(entry.kind ?? "").toLowerCase();
-    const window = kind.includes("week") || kind.includes("day")
-      ? "주간"
-      : kind.includes("hour") || kind.includes("session")
-        ? "세션"
-        : "";
-    const parsed = anthropicWindow(`${name}${window ? ` ${window}` : ""}`, entry, percentScale);
-    if (parsed) limits.push(parsed);
-  }
-  return limits;
-}
-
-export async function readAnthropicUsage(query) {
-  return query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
-    skipBehaviors: true,
-  });
 }
 
 export function anthropicQuotaResult(payload) {
@@ -157,23 +102,13 @@ async function localUsage(agentDir) {
   return totals;
 }
 
-async function packageRoot() {
-  const executable = process.env.SENPI_BIN || Bun.which("senpi");
-  if (!executable) throw new Error("senpi_not_found");
-  let directory = dirname(await realpath(executable));
-  while (directory !== dirname(directory)) {
-    if (await Bun.file(join(directory, "package.json")).exists()) {
-      const pkg = await Bun.file(join(directory, "package.json")).json();
-      if (pkg.name === "@code-yeongyu/senpi") return directory;
-    }
-    directory = dirname(directory);
-  }
-  throw new Error("senpi_package_not_found");
-}
-
 async function fetchJson(url, headers) {
   const response = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(10000) });
-  if (!response.ok) throw new Error(`usage_http_${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`usage_http_${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
 }
 
@@ -181,62 +116,20 @@ function unavailable(reason) {
   return { status: "unavailable", reason, source: "provider", limits: [] };
 }
 
-async function nativeAnthropicUsage(root) {
-  const [authLane, sdk, executable, settings] = await Promise.all([
-    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/auth-lane.js")),
-    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/sdk-boundary.js")),
-    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/executable.js")),
-    import(join(root, "dist/core/extensions/builtin/anthropic-subscription/settings.js")),
-  ]);
-  await sdk.loadClaudeAgentSdk();
-  const controller = new AbortController();
-  const queryReady = Promise.withResolvers();
-  let sdkQuery;
-  async function* idlePrompt() {
-    await new Promise(resolve => controller.signal.addEventListener("abort", resolve, { once: true }));
+export function providerQuotaAuthLimitation(providerId) {
+  if (providerId === "xiaomi-token-plan-sgp") {
+    return {
+      ...unavailable("requires_console_cookie"),
+      authRequirement: "api-platform_serviceToken+userId",
+    };
   }
-  const messages = authLane.queryWithAuthLane({
-    prompt: idlePrompt(),
-    query: sdk.getSdkBoundary().query,
-    providerSettings: settings.loadAnthropicSubscriptionProviderSettingsFromDisk(process.cwd()),
-    signal: controller.signal,
-    buildOptions: () => ({
-      cwd: process.cwd(),
-      tools: [],
-      permissionMode: "dontAsk",
-      settingSources: [],
-      pathToClaudeCodeExecutable: executable.resolveClaudeCodeRun(executable.defaultExecutableDeps()).executable,
-      abortController: controller,
-    }),
-    onQuery: queryReady.resolve,
-  });
-  let pumpError;
-  const pump = (async () => {
-    try {
-      for await (const _message of messages) {
-        // The idle prompt emits no model messages; iteration keeps the control channel alive.
-      }
-    } catch (error) {
-      queryReady.reject(error);
-      if (!controller.signal.aborted) pumpError = error;
-    }
-  })();
-  let timeout;
-  const deadline = new Promise((_, reject) => {
-    timeout = setTimeout(() => reject(new Error("usage_timeout")), 10000);
-  });
-  let result;
-  try {
-    sdkQuery = await Promise.race([queryReady.promise, deadline]);
-    result = await Promise.race([readAnthropicUsage(sdkQuery), deadline]);
-  } finally {
-    clearTimeout(timeout);
-    controller.abort();
-    sdkQuery?.close();
-    await pump;
+  if (providerId === "devin") {
+    return {
+      ...unavailable("requires_codeium_api_key"),
+      authRequirement: "Codeium/Windsurf metadata apiKey",
+    };
   }
-  if (pumpError) throw pumpError;
-  return result;
+  return null;
 }
 
 async function quotaFor(providerId, context) {
@@ -257,13 +150,44 @@ async function quotaFor(providerId, context) {
       return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_limits");
     }
     if (providerId === "anthropic-subscription") {
-      return anthropicQuotaResult(await context.anthropicUsage());
+      const result = await context.anthropicUsage(selected.name);
+      return {
+        ...anthropicQuotaResult(result.usage),
+        credentialSource: "senpi",
+        accountName: result.accountName,
+      };
     }
-    return unavailable("unsupported");
+    if (providerId === "kimi-coding") {
+      const auth = await context.runtime.getAuth(providerId, { slotName: selected.name });
+      const headers = auth?.auth?.headers;
+      if (!headers?.Authorization) return unavailable("missing_oauth_headers");
+      const payload = await fetchJson("https://api.kimi.com/coding/v1/usages", {
+        Accept: "application/json",
+        ...headers,
+      });
+      const limits = parseKimiUsage(payload);
+      return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_limits");
+    }
+    if (providerId === "zai") {
+      const auth = await context.runtime.getAuth(providerId, { slotName: selected.name });
+      const token = auth?.auth?.apiKey;
+      if (!token) return unavailable("missing_api_key");
+      const payload = await fetchJson("https://api.z.ai/api/monitor/usage/quota/limit", {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      });
+      const limits = parseZaiUsage(payload);
+      return limits.length ? { status: "available", source: "provider", limits } : unavailable("no_token_limits");
+    }
+    const limitation = providerQuotaAuthLimitation(providerId);
+    if (limitation) return limitation;
+    return unavailable("not_implemented");
   } catch (error) {
     if (providerId === "anthropic-subscription") {
       return unavailable(anthropicFailureReason(error, context.classifyAnthropicError));
     }
+    if (error?.status === 401 || error?.status === 403) return unavailable("auth_rejected");
+    if (error?.status === 429) return unavailable("rate_limited");
     return unavailable("request_failed");
   }
 }
@@ -292,15 +216,27 @@ async function collect() {
   const providers = [];
   for (const credential of credentials) {
     const accounts = await credentialAccounts.getCredentialAccounts(storage, credential.providerId);
-    const quota = await quotaFor(credential.providerId, {
-      accounts,
+    const context = {
       runtime,
       storage,
-      anthropicUsage: () => nativeAnthropicUsage(root),
+      anthropicUsage: name => nativeAnthropicUsage(root, name),
       classifyAnthropicError: anthropicErrors.classifySdkError,
       extractAccountId: piAi.extractChatGptSubscriptionAccountId,
-    });
-    const selected = accounts.find(account => account.pinned) ?? accounts.find(account => !account.blocked);
+    };
+    const accountQuotas = [];
+    for (const account of accounts) {
+      accountQuotas.push({
+        name: account.name,
+        displayName: account.displayName ?? account.name,
+        blocked: Boolean(account.blocked),
+        pinned: Boolean(account.pinned),
+        quota: await quotaFor(credential.providerId, { ...context, accounts: [account] }),
+      });
+    }
+    const selected = accounts.find(account => account.pinned && !account.blocked)
+      ?? accounts.find(account => !account.blocked);
+    const quota = accountQuotas.find(account => account.name === selected?.name)?.quota
+      ?? unavailable("all_accounts_blocked");
     providers.push({
       id: credential.providerId,
       name: PROVIDER_NAMES[credential.providerId] ?? runtime.getProvider(credential.providerId)?.name ?? credential.providerId,
@@ -312,6 +248,7 @@ async function collect() {
         selected: selected ? (selected.displayName ?? selected.name) : null,
       },
       quota,
+      accountQuotas,
       local: usage.get(credential.providerId) ?? { tokens: 0, messages: 0, sessions: 0 },
     });
   }

@@ -17,7 +17,33 @@ Panel {
   property double nowMs: Date.now()
 
   readonly property var barIdentity: hostWidget || root
-  readonly property var providers: usageService ? usageService.snapshot.providers : []
+  readonly property var providers: {
+    var result = []
+    var source = usageService ? usageService.snapshot.providers : []
+    for (var i = 0; i < source.length; i++) {
+      var provider = source[i]
+      var accounts = provider.accountQuotas || []
+      if (accounts.length === 0) {
+        result.push(provider)
+        continue
+      }
+      for (var j = 0; j < accounts.length; j++) {
+        var account = accounts[j]
+        result.push(Object.assign({}, provider, {
+          name: provider.name + " · " + account.displayName,
+          quota: account.quota,
+          showLocal: j === 0,
+          accounts: {
+            total: 1,
+            blocked: account.blocked ? 1 : 0,
+            ready: account.blocked ? 0 : 1,
+            selected: account.name
+          }
+        }))
+      }
+    }
+    return result
+  }
   readonly property color plate: "#F4F4F4"
   readonly property color ink: "#041617"
   readonly property color aqua: "#7FE0D4"
@@ -27,6 +53,7 @@ Panel {
 
   function open() {
     nowMs = Date.now()
+    scroll.contentY = 0
     controller.show()
   }
 
@@ -69,6 +96,15 @@ Panel {
         anchors.fill: parent
         color: root.plate
       }
+
+      Flickable {
+        id: scroll
+        anchors.fill: parent
+        clip: true
+        contentWidth: width
+        contentHeight: content.implicitHeight + 32
+        flickableDirection: Flickable.VerticalFlick
+        boundsBehavior: Flickable.StopAtBounds
 
       Column {
         id: content
@@ -150,7 +186,7 @@ Panel {
             required property var modelData
             readonly property var provider: modelData
             readonly property var limits: provider.quota
-              && Array.isArray(provider.quota.limits) ? provider.quota.limits : []
+              && provider.quota.limits ? provider.quota.limits : []
             readonly property bool quotaAvailable: provider.quota
               && provider.quota.status === "available" && limits.length > 0
             readonly property bool blocked: provider.accounts
@@ -192,7 +228,9 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Provider quota"
+              text: providerRow.provider.quota && providerRow.provider.quota.accountName
+                ? "Provider quota · account " + providerRow.provider.quota.accountName
+                : "Provider quota"
               color: root.muted
               font.family: "Noto Sans CJK KR"
               font.pixelSize: 11
@@ -260,7 +298,9 @@ Panel {
 
                 Text {
                   width: parent.width
-                  text: "Resets in " + Model.countdown(quotaWindow.limit.resetAtMs, root.nowMs)
+                  text: Number(quotaWindow.limit.resetAtMs) > 0
+                    ? "Resets in " + Model.countdown(quotaWindow.limit.resetAtMs, root.nowMs)
+                    : "Reset time not reported"
                   color: root.muted
                   font.family: root.monoFamily
                   font.pixelSize: 11
@@ -279,10 +319,11 @@ Panel {
 
             RowLayout {
               width: parent.width
+              visible: providerRow.provider.showLocal !== false
 
               Text {
                 Layout.fillWidth: true
-                text: "Local session usage"
+                text: "Provider's local sessions"
                 color: root.muted
                 font.family: "Noto Sans CJK KR"
                 font.pixelSize: 11
@@ -320,6 +361,7 @@ Panel {
           wrapMode: Text.WordWrap
           renderType: Text.NativeRendering
         }
+      }
       }
     }
   }
