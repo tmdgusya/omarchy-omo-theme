@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Ultrawork spark mask: six rays, white alpha, tinted at runtime</title>
+  <desc>Original shape for the OmO Omarchy plugin; licensed MIT with the plugin code (see repository LICENSE).</desc>
+  <path d="M256 160 L256 20" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M359.92 196 L420.54 161" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+  <path d="M339.14 304 L460.38 374" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M256 376 L256 446" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+  <path d="M172.86 304 L51.62 374" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round"/>
+  <path d="M152.08 196 L91.46 161" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+</svg>

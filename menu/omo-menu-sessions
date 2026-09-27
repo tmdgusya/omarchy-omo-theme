@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""OmO live-session rows for the Omarchy menu.
+
+Default: print a JSON array of menu rows shaped like the rows
+MenuModel.swapProviderRows() merges (/usr/share/omarchy/shell/plugins/menu/
+MenuModel.js:135-164; fields from normalizeItem, :13-39). Each row focuses its
+session through the plugin IPC (`omarchy-shell io.github.tmdgusya.omo focus`).
+
+--pick: show the same rows in `omarchy-menu-select` and focus the chosen one.
+Menu.qml 4.0.4 only runs its built-in providers (Menu.qml:338-339 returns on
+an unknown name), so the shipped menu fragment calls this mode as an action.
+
+Bounded: the collector runs in-process with a 0.2 s scan budget, at most 12
+rows, and a hard 0.28 s wall-clock alarm that falls back to one panel row.
+States mirror plugin/Model.js sessionState() (:284-298); nothing is inferred.
+"""
+
+import importlib.util
+import json
+import os
+import shlex
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+PLUGIN_ID = "io.github.tmdgusya.omo"
+PARENT = "omo.sessions"
+ROW_LIMIT = 12
+SCAN_SECONDS = 0.2
+HARD_SECONDS = 0.28
+SUCCESS_WINDOW_MS = 60000  # plugin/Model.js SUCCESS_WINDOW_MS
+
+# state -> (weather, Nerd Font glyph). concept.md section 1 weather table.
+WEATHER = {
+    "ultrawork": ("Storm", "\U000F0593"),   # nf-md-weather_lightning
+    "working": ("Tide", "\U000F078D"),      # nf-md-waves
+    "waiting": ("Lantern", "\U000F06E8"),   # nf-md-lightbulb_on
+    "error": ("Coral", "\U000F0028"),       # nf-md-alert_circle
+    "success": ("Calm", "\U000F012C"),      # nf-md-check
+    "idle": ("Calm", "\U000F0594"),         # nf-md-weather_night
+    "recent": ("Calm", "\U000F0594"),
+    "unknown": ("Calm", "\U000F0625"),      # nf-md-help_circle_outline
+    "ended": ("Calm", "\U000F04B2"),        # nf-md-sleep
+}
+PRIORITY = ("waiting", "error", "ultrawork", "working")
+
+
+def collector_path():
+    here = Path(__file__).resolve().parent
+    for candidate in (
+        os.environ.get("OMO_SESSIONS_PY"),
+        here.parent / "plugin" / "omo_sessions.py",
+        Path.home() / ".config/omarchy/plugins" / PLUGIN_ID / "omo_sessions.py",
+    ):
+        if candidate and Path(candidate).is_file():
+            return Path(candidate)
+    return None
+
+
+def session_state(s, now_ms):
+    r = s.get("runtime") or {}
+    ulw = str((s.get("ulw") or {}).get("status") or "")
+    goal = str((s.get("goal") or {}).get("status") or "")
+    kind = r.get("kind")
+    if kind == "ended":
+        return "ended"
+    if kind == "unknown":
+        return "recent" if r.get("status") == "recent" else "unknown"
+    if kind not in ("live", "idle"):
+        return "unknown"
+    if goal == "blocked" or ulw in ("failed", "blocked"):
+        return "error"
+    if r.get("status") == "waiting":
+        return "waiting"
+    if r.get("working") is True:
+        return "ultrawork" if ulw == "in_progress" else "working"
+    if goal == "complete" or ulw in ("complete", "completed"):
+        at = activity_ms(s)
+        if at > 0 and 0 <= now_ms - at <= SUCCESS_WINDOW_MS:
+            return "success"
+    return "idle"
+
+
+def activity_ms(s):
+    try:
+        return int(datetime.fromisoformat(str(s.get("activityAt")).replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return 0
+
+
+def focus_action(session_id):
+    return f"omarchy-shell {PLUGIN_ID} focus {shlex.quote(session_id)}"
+
+
+def row(row_id, icon, label, description, action):
+    return {"id": row_id, "parent": PARENT, "kind": "action", "icon": icon, "iconFont": "",
+            "label": label, "title": "", "target": "", "description": description,
+            "action": action, "provider": "", "aliases": [], "when": "", "checked": ""}
+
+
+def panel_row(reason):
+    return row(f"{PARENT}.panel", "\U000F0279", "Sessions panel", reason,
+               f"omarchy-shell {PLUGIN_ID} open")
+
+
+def rows_from(sessions, now_ms):
+    ranked = []
+    for index, s in enumerate(sessions):
+        if not isinstance(s, dict) or not s.get("id"):
+            continue
+        state = session_state(s, now_ms)
+        rank = PRIORITY.index(state) if state in PRIORITY else len(PRIORITY)
+        ranked.append((rank, -activity_ms(s), index, state, s))
+    ranked.sort(key=lambda item: item[:3])
+    out = []
+    for _, _, _, state, s in ranked[:ROW_LIMIT]:
+        weather, glyph = WEATHER[state]
+        sid = str(s["id"])
+        where = str(s.get("cwdLabel") or "")
+        description = " · ".join(part for part in (weather, state, where, sid[:8]) if part)
+        out.append(row(f"{PARENT}.{sid}", glyph, str(s.get("title") or sid[:8]), description, focus_action(sid)))
+    return out
+
+
+def collect():
+    path = collector_path()
+    if path is None:
+        return [panel_row("session collector not found")]
+    spec = importlib.util.spec_from_file_location("omo_sessions", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.SECONDS = SCAN_SECONDS
+    agent_dir = Path(os.environ.get("SENPI_CODING_AGENT_DIR") or os.environ.get("OMO_CODING_AGENT_DIR")
+                     or Path.home() / ".omo/agent")
+    result = module.list_sessions(agent_dir, Path.home() / ".omo/senpi-task")
+    rows = rows_from(result.get("sessions") or [], int(time.time() * 1000))
+    return rows or [panel_row("no sessions found")]
+
+
+class Deadline(Exception):
+    pass
+
+
+def on_alarm(signum, frame):
+    raise Deadline()
+
+
+def bounded_rows():
+    signal.signal(signal.SIGALRM, on_alarm)
+    signal.setitimer(signal.ITIMER_REAL, HARD_SECONDS)
+    try:
+        return collect()
+    except Deadline:
+        return [panel_row("session scan timed out")]
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+
+
+def pick(rows):
+    options = [f"{r['icon']}\t{r['label']}\t{r['description']}" for r in rows]
+    by_key = {f"{r['label']}\t{r['description']}": r for r in rows}
+    chosen = subprocess.run(["omarchy-menu-select", "Open session", *options],
+                            capture_output=True, text=True).stdout.rstrip("\n")
+    target = by_key.get(chosen)
+    if target is None:
+        return 0 if not chosen else 1
+    os.execvp("bash", ["bash", "-lc", target["action"]])
+
+
+def main(argv):
+    rows = bounded_rows()
+    if argv[1:] == ["--pick"]:
+        return pick(rows)
+    if argv[1:]:
+        print("usage: omo-menu-sessions [--pick]", file=sys.stderr)
+        return 2
+    print(json.dumps(rows, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

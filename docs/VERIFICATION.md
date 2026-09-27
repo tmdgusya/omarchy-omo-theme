@@ -2,10 +2,13 @@
 
 Verified on Omarchy 4.0.0.alpha, Quickshell 0.3.1 and Hyprland 0.56.2.
 
-- Python collector/installer tests: 25 passed.
-- Bun UI model tests: 34 passed.
+- Python collector/token/installer tests: 62 passed.
+- Bun model/notification/ambient tests: 59 passed.
 - Native plugin validation, Bash syntax and Git whitespace checks passed.
-- Wallpaper rebuild reproduced both installed PNGs byte-for-byte.
+- Reversible installer tests cover owned menu keys in commented JSONC, Senpi
+  theme selection/restoration, edited-file refusal, the explicit lock/soak
+  gates, and byte-exact unchanged round trips in isolated HOME directories.
+- Wallpaper rebuild reproduced the three installed Nightsea PNGs byte-for-byte.
 - TypeScript extension diagnostics were clean. Python and Bash language
   servers were unavailable; their executable checks passed. QML lint has
   the same unresolved dynamic token warnings as first-party shell widgets;
@@ -33,6 +36,13 @@ Temporary processes, fixture directories and runtime records were removed.
 Actual installation, update, removal and reinstallation succeeded. Updates
 restart the shell to invalidate loaded QML; removing the widget preserved
 unrelated settings. Personal Ghostty and Hyprland configuration stayed intact.
+
+The total-conversion installer additions were deliberately not run against the
+live desktop. Their menu, Senpi and lock lifecycle checks use isolated HOME,
+fake host IPC, a fake proc tree and injected clock values. The production soak
+tool itself never sleeps: `start` captures PID/start ticks/RSS and `finish`
+emits a receipt only after the real elapsed-time and same-process checks pass.
+Live opt-in Lock Explorer and 24 hour soak acceptance remain user actions.
 
 ## Known host behavior
 

@@ -1,0 +1,128 @@
+{
+  "frame": {
+    "width": 2560,
+    "height": 1440
+  },
+  "base": "../../backgrounds/01-nightsea-calm.png",
+  "blend": "source-over",
+  "contract": "backgrounds/02-nightsea-storm.png == base + strike layers in `order`, each drawn at its x/y",
+  "anchors": {
+    "catCenter": {
+      "x": 1800,
+      "y": 600
+    },
+    "catBox": {
+      "x": "1590",
+      "y": "412.5",
+      "w": "420",
+      "h": "375"
+    },
+    "leftEarTip": {
+      "x": "1617.23",
+      "y": "412.37"
+    },
+    "horizon": 1000
+  },
+  "order": [
+    "sky-flash",
+    "cat-glow",
+    "bolt-strike",
+    "ear-spark"
+  ],
+  "layers": {
+    "sky-flash": {
+      "file": "sky-flash.png",
+      "x": 400,
+      "y": 0,
+      "width": 2160,
+      "height": 1420,
+      "role": "strike"
+    },
+    "cat-glow": {
+      "file": "cat-glow.png",
+      "x": 1397,
+      "y": 219,
+      "width": 943,
+      "height": 899,
+      "role": "strike"
+    },
+    "bolt-leader": {
+      "file": "bolt-leader.png",
+      "x": 612,
+      "y": 0,
+      "width": 1724,
+      "height": 1440,
+      "role": "strike",
+      "stage": "leader"
+    },
+    "bolt-strike": {
+      "file": "bolt-strike.png",
+      "x": 612,
+      "y": 0,
+      "width": 1724,
+      "height": 1440,
+      "role": "strike",
+      "stage": "strike"
+    },
+    "bolt-afterglow": {
+      "file": "bolt-afterglow.png",
+      "x": 612,
+      "y": 0,
+      "width": 1724,
+      "height": 1440,
+      "role": "strike",
+      "stage": "afterglow"
+    },
+    "ear-spark": {
+      "file": "ear-spark.png",
+      "x": 1397,
+      "y": 192,
+      "width": 441,
+      "height": 441,
+      "role": "strike"
+    }
+  },
+  "sequence": [
+    {
+      "phase": "leader",
+      "layers": [
+        "bolt-leader"
+      ],
+      "ms": 90
+    },
+    {
+      "phase": "strike",
+      "layers": [
+        "sky-flash",
+        "cat-glow",
+        "bolt-strike",
+        "ear-spark"
+      ],
+      "ms": 90
+    },
+    {
+      "phase": "afterglow",
+      "layers": [
+        "bolt-afterglow",
+        "cat-glow"
+      ],
+      "ms": 600,
+      "easing": "OutExpo",
+      "fadeOut": true
+    },
+    {
+      "phase": "working",
+      "layers": [
+        "cat-glow"
+      ],
+      "ms": 2400,
+      "easing": "InOutSine",
+      "loop": "breathe 0.35..0.8"
+    }
+  ],
+  "motionTokens": {
+    "bolt.flash": "2 x 90ms step",
+    "bolt.decay": "600ms OutExpo",
+    "breath": "2400ms InOutSine"
+  }
+}

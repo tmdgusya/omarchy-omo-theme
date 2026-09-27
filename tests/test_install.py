@@ -40,6 +40,9 @@ if args[:2] == ["plugin", "validate"]:
     assert manifest["id"] == plugin_id
     assert manifest["schemaVersion"] == 1
     assert (folder / manifest["entryPoints"]["barWidget"]).is_file()
+    if "service" in manifest["kinds"]:
+        assert manifest["keepLoaded"] is True
+        assert (folder / manifest["entryPoints"]["service"]).is_file()
     assert not any(path.is_symlink() for path in folder.rglob("*"))
     sys.exit(0)
 
@@ -65,10 +68,10 @@ elif args[:2] == ["bar", "position"]:
     assert args[2] in ("top", "left", "right", "bottom")
     data["bar"]["position"] = args[2]
 elif args[:2] == ["bar", "set"]:
-    assert args[2:4] == [plugin_id, "senpiPath"]
+    assert args[2] == plugin_id and args[3] in ("senpiPath", "launcherPath", "trackingInstalled")
     assert len(args) == 5
     entry = next(entry for section in layout.values() for entry in section if entry["id"] == plugin_id)
-    entry["senpiPath"] = args[4]
+    entry[args[3]] = args[4]
 else:
     sys.exit("unsupported command: " + repr(args))
 config.write_text(json.dumps(data))
@@ -85,13 +88,23 @@ class InstallPluginTests(unittest.TestCase):
         self.repo = self.root / "theme"
         (self.repo / "scripts").mkdir(parents=True)
         (self.repo / "plugin").mkdir()
+        (self.repo / "plugin" / "ambient").mkdir()
+        (self.repo / "plugin" / "notify").mkdir()
+        (self.repo / "art/layers").mkdir(parents=True)
         for name in ("install-plugin.sh", "uninstall-plugin.sh"):
             shutil.copy2(ROOT / "scripts" / name, self.repo / "scripts" / name)
         (self.repo / "plugin" / "manifest.json").write_text(json.dumps({
             "schemaVersion": 1, "id": PLUGIN_ID, "name": "OmO", "version": "1",
-            "kinds": ["bar-widget"], "entryPoints": {"barWidget": "Panel.qml"},
+            "kinds": ["bar-widget", "service"], "keepLoaded": True,
+            "entryPoints": {"barWidget": "Panel.qml", "service": "Service.qml"},
         }))
         (self.repo / "plugin" / "Panel.qml").write_text("widget v1\n")
+        (self.repo / "plugin" / "Service.qml").write_text("service root\n")
+        (self.repo / "plugin/ambient/AmbientService.qml").write_text("ambient service\n")
+        (self.repo / "plugin/notify/NotificationService.qml").write_text("notification service\n")
+        (self.repo / "plugin" / "omo-status.ts").write_text("export default function () {}\n")
+        (self.repo / "art/layers/manifest.json").write_text('{"frame":{"width":2560,"height":1440}}\n')
+        (self.repo / "art/layers/strike.png").write_bytes(b"owned layer")
         self.config = self.home / ".config/omarchy/shell.json"
         self.config.parent.mkdir(parents=True)
         self.initial = {
@@ -113,6 +126,7 @@ class InstallPluginTests(unittest.TestCase):
                     "PATH": f"{self.bin}:/usr/bin:/bin",
                     "PYTHONDONTWRITEBYTECODE": "1"}
         self.target = self.home / ".config/omarchy/plugins" / PLUGIN_ID
+        self.layers_target = self.home / ".config/omarchy/plugins/art/layers"
 
     def save(self, data):
         self.config.write_text(json.dumps(data))
@@ -142,7 +156,55 @@ class InstallPluginTests(unittest.TestCase):
         self.assertEqual(removed.returncode, 0, removed.stderr)
         self.assertEqual(self.current(), before)
         self.assertFalse(self.target.exists())
+        self.assertFalse(self.layers_target.exists())
         self.assertTrue(list(self.config.parent.glob("shell.json.bak.omo.*")))
+
+    def test_install_copies_native_services_and_owned_ambient_layers(self):
+        # Given a bundle with both native services and the overlay layer set.
+        # When installing the plugin.
+        result = self.run_script("install-plugin.sh")
+        # Then the host entry point and its external relative assets are installed as owned files.
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.target / "Service.qml").read_text(), "service root\n")
+        self.assertEqual((self.target / "ambient/AmbientService.qml").read_text(), "ambient service\n")
+        self.assertEqual((self.target / "notify/NotificationService.qml").read_text(),
+                         "notification service\n")
+        self.assertEqual((self.layers_target / "strike.png").read_bytes(), b"owned layer")
+        layer_marker = json.loads((self.layers_target / ".omo-install.json").read_text())
+        self.assertEqual(layer_marker, {"schema": 1, "id": PLUGIN_ID, "kind": "ambient-layers"})
+        checksums = (self.layers_target / ".omo-install.sha256").read_text()
+        self.assertIn("./manifest.json", checksums)
+        self.assertIn("./strike.png", checksums)
+        self.assertEqual((self.target / "ambient/../../art/layers").resolve(), self.layers_target)
+
+    def test_foreign_ambient_layers_are_never_claimed(self):
+        # Given an unowned directory at the overlay's required runtime path.
+        self.layers_target.mkdir(parents=True)
+        foreign = self.layers_target / "private.png"
+        foreign.write_bytes(b"private")
+        # When installation is requested.
+        result = self.run_script("install-plugin.sh")
+        # Then neither the foreign asset nor plugin layout is changed.
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(foreign.read_bytes(), b"private")
+        self.assertFalse(self.target.exists())
+        self.assertEqual(self.current(), self.initial)
+
+    def test_modified_ambient_layers_block_update_and_removal(self):
+        # Given installed layers changed after installation.
+        self.assertEqual(self.run_script("install-plugin.sh").returncode, 0)
+        edited = self.layers_target / "strike.png"
+        edited.write_bytes(b"personal layer")
+        before = self.current()
+        # When either lifecycle command is requested.
+        update = self.run_script("install-plugin.sh")
+        remove = self.run_script("uninstall-plugin.sh")
+        # Then the edit and all installed state survive for manual recovery.
+        self.assertNotEqual(update.returncode, 0)
+        self.assertNotEqual(remove.returncode, 0)
+        self.assertEqual(edited.read_bytes(), b"personal layer")
+        self.assertTrue(self.target.exists())
+        self.assertEqual(self.current(), before)
 
     def test_repeat_install_updates_owned_files_without_reenabling(self):
         # Given an installed widget with a later user layout change.
@@ -199,7 +261,8 @@ class InstallPluginTests(unittest.TestCase):
         # Then the user's explicit path is never replaced.
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.current(), changed)
-        self.assertEqual(sum(call[1:4] == ["bar", "set", PLUGIN_ID] for call in self.calls()), 1)
+        self.assertEqual(sum(call[1:5] == ["bar", "set", PLUGIN_ID, "senpiPath"]
+                             for call in self.calls()), 1)
         self.assertIn(["omarchy", "restart", "shell"], self.calls())
 
     def test_install_without_senpi_reports_unresolved_launch(self):
@@ -273,6 +336,56 @@ class InstallPluginTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.current()["bar"]["position"], "bottom")
         self.assertEqual(self.current()["unrelated"], {"keep": 99})
+
+    def test_tracking_opt_in_installs_and_removes_only_owned_extension(self):
+        # Given an isolated profile with an unrelated installed extension.
+        agent = self.home / ".omo/agent"
+        agent.mkdir(parents=True)
+        settings = agent / "settings.json"
+        settings.write_text(json.dumps({"packages": ["/other/extension.ts"]}))
+        senpi = self.bin / "senpi"
+        senpi.write_text("""#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+settings = Path(os.environ["SENPI_CODING_AGENT_DIR"]) / "settings.json"
+data = json.loads(settings.read_text())
+assert sys.argv[1] in ("install", "remove")
+source = sys.argv[2]
+if sys.argv[1] == "install":
+    assert Path(source).is_file()
+    if source not in data["packages"]: data["packages"].append(source)
+else:
+    data["packages"].remove(source)
+settings.write_text(json.dumps(data))
+""")
+        senpi.chmod(0o755)
+        self.env["SENPI_CODING_AGENT_DIR"] = str(agent)
+        # When tracking is enabled then the widget is removed.
+        installed = self.run_script("install-plugin.sh", "--track-all-sessions")
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        source = json.loads((self.target / ".omo-install.json").read_text())["trackingSource"]
+        self.assertEqual(source, str(self.target / "omo-status.ts"))
+        self.assertEqual(json.loads(settings.read_text())["packages"], ["/other/extension.ts", source])
+        self.assertEqual(self.current()["bar"]["layout"]["left"][-1]["trackingInstalled"], "true")
+        removed = self.run_script("uninstall-plugin.sh")
+        # Then only the extension installed by this widget is removed.
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(json.loads(settings.read_text())["packages"], ["/other/extension.ts"])
+
+    def test_launcher_preference_uses_omo_when_available(self):
+        # Given both launcher binaries on the installer PATH.
+        for name in ("omo", "senpi"):
+            executable = self.bin / name
+            executable.write_text("#!/bin/sh\nexit 0\n")
+            executable.chmod(0o755)
+        # When installing the widget.
+        result = self.run_script("install-plugin.sh")
+        # Then the preferred launcher is stored for the panel.
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.current()["bar"]["layout"]["left"][-1]["launcherPath"],
+                         str(self.bin / "omo"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,16 @@
+{
+  // OmO section for ~/.config/omarchy/extensions/omarchy-menu.jsonc.
+  // scripts/install-menu.sh merges only the omo.* keys below (owned-keys
+  // marker + timestamped backup); uninstall removes exactly those keys.
+  // Glyphs are Nerd Font (md) codepoints, never emoji.
+  //
+  // omo.sessions runs menu/omo-menu-sessions --pick as an action: Menu.qml in
+  // this Omarchy build only runs built-in providers (Menu.qml:338-339), so a
+  // custom `provider` name would open an empty submenu. The script's default
+  // mode prints MenuModel.swapProviderRows rows for when that hook opens up.
+  "omo": {"icon":"󰄛","label":"OmO","aliases":["omo"],"description":"OmO sessions, launcher and Storm overlay"},
+  "omo.new": {"icon":"󰐕","label":"New session","action":"omarchy-shell io.github.tmdgusya.omo launch","description":"Launch omo in a new terminal"},
+  "omo.panel": {"icon":"󰉹","label":"Sessions panel","action":"omarchy-shell io.github.tmdgusya.omo open","description":"Open the OmO session panel on the bar"},
+  "omo.sessions": {"icon":"󰆍","label":"Open session…","action":"\"$HOME/.config/omarchy/themes/omo/menu/omo-menu-sessions\" --pick","description":"Pick a live session by weather and focus its window"},
+  "omo.storm": {"icon":"󰖓","label":"Storm overlay","action":"v=$(jq -r '[.. | objects | select(.id? == \"io.github.tmdgusya.omo\")][0].ambientOverlay // false | tostring' ~/.config/omarchy/shell.json); omarchy bar set io.github.tmdgusya.omo ambientOverlay \"$([ \"$v\" = true ] && echo false || echo true)\" --json","checked":"jq -e '[.. | objects | select(.id? == \"io.github.tmdgusya.omo\")][0].ambientOverlay | tostring == \"true\"' ~/.config/omarchy/shell.json","description":"Live lightning layer on the wallpaper during verified ultrawork (off by default)"}
+}

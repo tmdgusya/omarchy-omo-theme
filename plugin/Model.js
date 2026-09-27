@@ -21,9 +21,9 @@ var SUCCESS_WINDOW_MS = 60000    // a completed goal/loop reads as "done" this l
 
 // Display priority, highest first. The bar cell shows the first state any
 // session is in; the list chip shows each session's own state.
-var STATES = ["error", "waiting", "ultrawork", "working", "success", "idle", "unknown", "ended"]
+var STATES = ["error", "waiting", "ultrawork", "working", "success", "idle", "recent", "unknown", "ended"]
 var RUNTIME_KINDS = ["live", "idle", "ended", "unknown"]
-var RUNTIME_STATUSES = ["working", "waiting", "idle", "ended", "unknown"]
+var RUNTIME_STATUSES = ["working", "waiting", "idle", "ended", "recent", "unknown"]
 var FILTERS = ["all", "active", "ended", "error"]
 
 // ---------------------------------------------------------------- primitives
@@ -287,6 +287,7 @@ function sessionState(session, nowMs) {
   var ulwStatus = s.ulw ? String(s.ulw.status || "") : ""
   var goalStatus = s.goal ? String(s.goal.status || "") : ""
   if (r.kind === "ended") return "ended"
+  if (r.kind === "unknown") return r.status === "recent" ? "recent" : "unknown"
   if (r.kind !== "live" && r.kind !== "idle") return "unknown"
   if (goalStatus === "blocked" || ulwStatus === "failed" || ulwStatus === "blocked") return "error"
   if (r.status === "waiting") return "waiting"
@@ -317,12 +318,13 @@ function stateLabel(state) {
   case "success": return "done"
   case "ended": return "ended"
   case "idle": return "idle"
+  case "recent": return "recent"
   default: return "unknown"
   }
 }
 
 function isActiveState(state) {
-  return state === "working" || state === "ultrawork" || state === "waiting"
+  return state === "working" || state === "ultrawork" || state === "waiting" || state === "recent"
 }
 
 // Short evidence line under a selected row: what the collector could prove,
@@ -378,7 +380,7 @@ function countSegment(n, word) {
 // Bar-level summary of every listed session.
 function aggregate(sessions, nowMs, dismissed) {
   var list = Array.isArray(sessions) ? sessions : []
-  var counts = { error: 0, waiting: 0, ultrawork: 0, working: 0, success: 0, idle: 0, unknown: 0, ended: 0 }
+  var counts = { error: 0, waiting: 0, ultrawork: 0, working: 0, success: 0, idle: 0, recent: 0, unknown: 0, ended: 0 }
   var top = "idle"
   var topRank = STATES.length
   var ulwSummary = ""
@@ -394,11 +396,12 @@ function aggregate(sessions, nowMs, dismissed) {
   }
   if (list.length === 0) top = "idle"
   var running = counts.working + counts.ultrawork
-  var active = running + counts.waiting
+  var active = running + counts.waiting + counts.recent
   var segments = []
   var seg
   seg = countSegment(running, "working"); if (seg) segments.push(seg)
   seg = countSegment(counts.waiting, "waiting"); if (seg) segments.push(seg)
+  seg = countSegment(counts.recent, "recent"); if (seg) segments.push(seg)
   seg = countSegment(counts.error, "error"); if (seg) segments.push(seg)
   if (ulwSummary) segments.push(ulwSummary)
   var tooltip
@@ -543,9 +546,9 @@ function viewCommand(scriptPath, agentDir, sessionPath) {
 // live-state extension (`omo-status.ts`, see live-state.md) is loaded with
 // `senpi -e` so the new session reports real working/waiting state; sessions
 // started without it stay `unknown`.
-function launchCommand(cwd, extensionPath, senpiPath, agentDir) {
-  var executable = senpiPath === undefined || senpiPath === "" ? "senpi" : senpiPath
-  if (executable !== "senpi" && safePath(executable) === "") return null
+function launchCommand(cwd, extensionPath, launcherPath, agentDir, trackingInstalled) {
+  var executable = launcherPath === undefined || launcherPath === "" ? "senpi" : launcherPath
+  if (executable !== "senpi" && executable !== "omo" && safePath(executable) === "") return null
   var args = ["ghostty", "--gtk-single-instance=false"]
   var dir = safePath(cwd)
   if (dir !== "") args.push("--working-directory=" + dir)
@@ -554,8 +557,36 @@ function launchCommand(cwd, extensionPath, senpiPath, agentDir) {
   if (profile !== "") args.push("env", "SENPI_CODING_AGENT_DIR=" + profile)
   args.push(executable)
   var extension = safePath(extensionPath)
-  if (extension !== "" && /\.(ts|js|mjs)$/.test(extension)) args.push("-e", extension)
+  if (trackingInstalled !== true && extension !== "" && /\.(ts|js|mjs)$/.test(extension)) args.push("-e", extension)
   return args
+}
+
+// Never resume a session whose writer may still be alive. The caller executes
+// argv only for focus/resume and surfaces reason for blocked.
+function openCommand(session, opts) {
+  var s = record(session)
+  var options = record(opts)
+  var runtime = record(s.runtime)
+  var address = focusAddress({ address: s.focusAddress || record(s.focus).address })
+  if (address !== "" && (runtime.kind === "live" || runtime.kind === "idle"))
+    return { kind: "focus", argv: focusCommand(address), reason: "" }
+  if (runtime.kind === "live" || runtime.kind === "idle" || runtime.status === "recent") {
+    return { kind: "blocked", argv: null, reason: "running elsewhere" }
+  }
+  var path = safePath(s.sessionPath)
+  var cwd = safePath(s.cwd)
+  var agent = safePath(options.agentDir)
+  if (path === "" || !/\.jsonl$/.test(path) || cwd === "" || agent === "") {
+    return { kind: "blocked", argv: null, reason: "invalid session path or agent directory" }
+  }
+  var argv = launchCommand(cwd, options.extensionPath, options.launcherPath || options.senpiPath, agent, options.trackingInstalled)
+  if (!argv) return { kind: "blocked", argv: null, reason: "invalid launcher" }
+  // The session selector must precede the optional per-process extension.
+  var extension = safePath(options.extensionPath)
+  if (options.trackingInstalled !== true && argv[argv.length - 1] === extension)
+    argv.splice(argv.length - 2, 0, "--session", path)
+  else argv.push("--session", path)
+  return { kind: "resume", argv: argv, reason: "" }
 }
 
 // Focus is only offered for a collector-proven Hyprland address.
@@ -628,6 +659,7 @@ var exportsObject = {
   listCommand: listCommand,
   viewCommand: viewCommand,
   launchCommand: launchCommand,
+  openCommand: openCommand,
   focusCommand: focusCommand,
   viewText: viewText
 }

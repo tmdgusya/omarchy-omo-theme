@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <title>Ultrawork bolt mask: white alpha, tinted by the shell accent color at runtime</title>
+  <title>Ultrawork bolt mask: white alpha, tinted at runtime (core and glow colors come from the widget)</title>
   <desc>Original shape for the OmO Omarchy plugin; licensed MIT with the plugin code (see repository LICENSE).</desc>
-  <path fill="#FFFFFF" d="M300 16 L96 296 L232 296 L188 496 L416 200 L280 200 Z"/>
+  <path fill="#FFFFFF" d="M318 4 L64 300 L214 300 L150 508 L452 184 L296 184 Z"/>
 </svg>

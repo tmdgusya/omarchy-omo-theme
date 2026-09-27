@@ -395,6 +395,48 @@ describe("commands", () => {
       "/opt/senpi", "-e", "/opt/omo-status.ts",
     ])
   })
+
+  test("open focuses a verified window and blocks an unaddressable running session", () => {
+    const options = { extensionPath: "/opt/omo-status.ts", launcherPath: "/opt/omo", agentDir: "/tmp/agent" }
+    expect(Model.openCommand(parsed({ runtime: working, focus: { address: "0xabc1" } }), options)).toEqual({
+      kind: "focus", argv: Model.focusCommand("0xabc1"), reason: "",
+    })
+    expect(Model.openCommand(parsed({ runtime: idleProcess }), options)).toEqual({
+      kind: "blocked", argv: null, reason: "running elsewhere",
+    })
+    expect(Model.openCommand(parsed({ runtime: { kind: "unknown", status: "recent", working: false } }), options)).toEqual({
+      kind: "blocked", argv: null, reason: "running elsewhere",
+    })
+  })
+
+  test("open resumes an ended session with the same launcher and agent directory", () => {
+    const options = { extensionPath: "/opt/omo-status.ts", launcherPath: "/opt/omo", agentDir: "/tmp/agent" }
+    expect(Model.openCommand(parsed({ runtime: ended }), options)).toEqual({
+      kind: "resume",
+      argv: ["ghostty", "--gtk-single-instance=false", "--working-directory=/home/roach/omarchy-omo-theme",
+        "-e", "env", "SENPI_CODING_AGENT_DIR=/tmp/agent", "/opt/omo", "--session",
+        "/home/roach/.omo/agent/sessions/--home-roach--/2026-09-27_s1.jsonl", "-e", "/opt/omo-status.ts"],
+      reason: "",
+    })
+    expect(Model.openCommand(parsed({ runtime: ended, sessionPath: "relative.jsonl" }), options).kind).toBe("blocked")
+    expect(Model.launchCommand("/tmp", "/opt/omo-status.ts", "/opt/omo", "/tmp/agent")).toContain("/opt/omo")
+    const tracked = Model.openCommand(parsed({ runtime: ended }), { ...options, trackingInstalled: true })
+    expect(tracked.argv).not.toContain("/opt/omo-status.ts")
+    expect(Model.launchCommand("/tmp", "/opt/omo-status.ts", "/opt/omo", "/tmp/agent", true)).not.toContain("/opt/omo-status.ts")
+  })
+})
+
+describe("recent runtime", () => {
+  test("shows recent in Active and caption without animation", () => {
+    const session = parsed({ runtime: { kind: "unknown", status: "recent", working: false } })
+    expect(Model.sessionState(session, NOW)).toBe("recent")
+    expect(Model.filterSessions([session], "active", NOW, {})).toEqual([session])
+    const summary = Model.aggregate([session], NOW, {})
+    expect(summary.caption).toBe("1")
+    expect(summary.animated).toBe(false)
+    expect(summary.glow).toBe(false)
+    expect(Model.stateLabel("recent")).toBe("recent")
+  })
 })
 
 describe("view text", () => {

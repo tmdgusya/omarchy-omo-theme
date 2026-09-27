@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "plugin" / "omo_sessions.py"
@@ -44,6 +45,14 @@ class SessionCollectorTests(unittest.TestCase):
         self.path = self.folder / "2026-09-26T00-00-00Z_abc-123.jsonl"
         self.runtime = root / "runtime"
         self.runtime.mkdir(mode=0o700)
+        self.bin = root / "bin"
+        self.bin.mkdir()
+        self.clients = root / "clients.json"
+        self.clients.write_text("[]")
+        hyprctl = self.bin / "hyprctl"
+        hyprctl.write_text("#!/bin/sh\n[ \"$1\" = clients ] && [ \"$2\" = -j ] || exit 1\n"
+                           f"exec /usr/bin/cat '{self.clients}'\n")
+        hyprctl.chmod(0o755)
 
     def cli(self, *args):
         return subprocess.run(
@@ -51,7 +60,8 @@ class SessionCollectorTests(unittest.TestCase):
              "--task-dir", str(self.tasks), *args],
             capture_output=True, text=True, check=False, timeout=8,
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
-                 "XDG_RUNTIME_DIR": str(self.runtime)},
+                 "XDG_RUNTIME_DIR": str(self.runtime),
+                 "PATH": f"{self.bin}:{os.environ.get('PATH', '')}"},
         )
 
     def write_session(self, *entries, sid="abc-123", path=None):
@@ -77,8 +87,8 @@ class SessionCollectorTests(unittest.TestCase):
         self.addCleanup(cleanup)
         return process
 
-    def emit(self, process, event):
-        process.stdin.write(json.dumps({"type": event}) + "\n")
+    def emit(self, process, event, **details):
+        process.stdin.write(json.dumps({"type": event, **details}) + "\n")
         process.stdin.flush()
         ready, _, _ = select.select([process.stdout], [], [], 4)
         self.assertTrue(ready, f"adapter failed: {process.poll()}")
@@ -312,6 +322,46 @@ class SessionCollectorTests(unittest.TestCase):
         self.emit(process, "session_start")
         self.emit(process, "agent_start")
         self.assertTrue(self.listing()["sessions"][0]["runtime"]["working"])
+
+    def test_reload_attaches_to_running_session_and_publishes_state(self):
+        self.write_session()
+        process = self.adapter()
+        self.emit(process, "session_start", reason="reload")
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["kind"], "idle")
+
+    def test_recent_activity_is_visible_without_claiming_liveness(self):
+        timestamp = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        self.write_session({"type": "message", "id": "a", "parentId": None,
+                            "timestamp": timestamp, "message": {"role": "assistant"}})
+        runtime = self.listing()["sessions"][0]["runtime"]
+        self.assertEqual(runtime["kind"], "unknown")
+        self.assertEqual(runtime["status"], "recent")
+        self.assertFalse(runtime["working"])
+
+    def test_old_activity_does_not_claim_recent_status(self):
+        timestamp = (datetime.now(timezone.utc) - timedelta(minutes=11)).isoformat()
+        self.write_session({"type": "message", "id": "a", "parentId": None,
+                            "timestamp": timestamp, "message": {"role": "user"}})
+        self.assertEqual(self.listing()["sessions"][0]["runtime"]["status"], "unknown")
+
+    def test_live_process_ancestor_selects_single_hyprland_window(self):
+        self.write_session()
+        process = self.adapter()
+        self.emit(process, "session_start")
+        self.clients.write_text(json.dumps([{"pid": process.pid, "address": "0xabc1"}]))
+        item = self.listing()["sessions"][0]
+        self.assertEqual(item["focus"], {"address": "0xabc1"})
+        self.clients.write_text(json.dumps([{"pid": process.pid, "address": "0xabc1"},
+                                            {"pid": process.pid, "address": "0xabc2"}]))
+        self.assertNotIn("focus", self.listing()["sessions"][0])
+        self.clients.write_text(json.dumps([{"pid": process.pid, "address": "0xabc1"},
+                                            {"pid": process.pid, "address": "0xabc1"}]))
+        self.assertNotIn("focus", self.listing()["sessions"][0])
+
+    def test_untracked_session_never_inherits_another_process_window(self):
+        self.write_session()
+        self.clients.write_text(json.dumps([{"pid": os.getpid(), "address": "0xabc1"}]))
+        self.assertNotIn("focus", self.listing()["sessions"][0])
 
     def test_exited_process_and_reused_pid_never_remain_working(self):
         self.write_session()

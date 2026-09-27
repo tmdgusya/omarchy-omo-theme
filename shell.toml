@@ -4,9 +4,9 @@
 # the bar keeps its 28px vertical width and nothing personal is overridden.
 
 [bar]
-# Fallback when the bar is not transparent; ink floor at glass opacity.
+# Fallback when the bar is not transparent; ink floor melts into the sea.
 background       = "#041617"
-background-alpha = 0.72
+background-alpha = 0.92
 text             = "#DCE7E6"
 # Attention = "a human is needed" (butter), kept apart from failure (coral).
 active           = "#F2D38B"
@@ -24,21 +24,21 @@ normal-color        = "#DCE7E6"
 normal-fill-alpha   = 0.04
 normal-border       = "#DCE7E6"
 normal-border-width = 1
-normal-border-alpha = 0.4
+normal-border-alpha = 0.25
 
 hover-cursor-color        = "#DCE7E6"
 hover-cursor-fill-alpha   = 0.08
 hover-cursor-border       = "#DCE7E6"
 hover-cursor-border-width = 1
-hover-cursor-border-alpha = 0.25
+hover-cursor-border-alpha = 0.20
 
 focus-color        = "#DCE7E6"
 focus-fill-alpha   = 0.08
 focus-border       = "#DCE7E6"
 focus-border-width = 1
-focus-border-alpha = 0.25
+focus-border-alpha = 0.20
 
-# Selected = tonal fill, no accent stripe.
+# Hairline + tonal fill density; selected = tonal fill, no accent stripe.
 selected-color        = "#DCE7E6"
 selected-fill-alpha   = 0.18
 selected-border       = "#DCE7E6"
@@ -56,22 +56,24 @@ scale-with-font = true
 base-size = 12
 
 [popups]
+# Opaque cards: at 0.92/0.97 terminal text ghosted through (measured on the
+# real desktop, notification card included), so every card surface is 1.0.
 background       = "#0B1B1D"
-background-alpha = 0.92
+background-alpha = 1.0
 text             = "#DCE7E6"
-border           = "hyprland.active-border"
+border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [tooltip]
 background       = "#0B1B1D"
-background-alpha = 0.97
+background-alpha = 1.0
 text             = "#DCE7E6"
 border           = "hyprland.active-border-foreground"
 border-alpha     = 1.0
 
 [notifications]
 background       = "#0B1B1D"
-background-alpha = 0.92
+background-alpha = 1.0
 text             = "#DCE7E6"
 border           = "hyprland.active-border"
 border-alpha     = 1.0
@@ -79,13 +81,13 @@ countdown        = "#7FE0D4"
 
 [launcher]
 background                = "#0B1B1D"
-background-alpha          = 0.92
+background-alpha          = 1.0
 text                      = "#DCE7E6"
 border                    = "hyprland.active-border-foreground"
 border-alpha              = 1.0
 scrim                     = "#041617"
 scrim-alpha               = 0.5
-selected-background       = "#DCE7E6"
+selected-background       = "#F4F4F4"
 selected-background-alpha = 0.10
 selected-text             = "#7FE0D4"
 selected-border           = "hyprland.active-border-foreground"
@@ -93,13 +95,13 @@ selected-border-alpha     = 0.0
 
 [menu]
 background                = "#0B1B1D"
-background-alpha          = 0.92
+background-alpha          = 1.0
 text                      = "#DCE7E6"
 border                    = "hyprland.active-border-foreground"
 border-alpha              = 1.0
 scrim                     = "#041617"
 scrim-alpha               = 0.5
-selected-background       = "#DCE7E6"
+selected-background       = "#F4F4F4"
 selected-background-alpha = 0.10
 selected-text             = "#7FE0D4"
 selected-border           = "hyprland.active-border-foreground"
@@ -107,7 +109,7 @@ selected-border-alpha     = 0.0
 
 [polkit]
 background       = "#0B1B1D"
-background-alpha = 0.92
+background-alpha = 1.0
 text             = "#DCE7E6"
 text-error       = "#F08A8A"
 border           = "hyprland.active-border"
@@ -121,7 +123,7 @@ accent           = "#7FE0D4"
 background       = "#041617"
 background-alpha = 0.8
 text             = "#DCE7E6"
-placeholder      = "#95A2A2"
+placeholder      = "#A8BFBF"
 text-error       = "#F08A8A"
 border           = "hyprland.active-border"
 border-active    = "hyprland.active-border"
@@ -132,9 +134,9 @@ selection-alpha  = 0.45
 
 [image-picker]
 scrim                   = "#041617"
-scrim-alpha             = 0.5
+scrim-alpha             = 0.6
 text                    = "#DCE7E6"
 selected-border         = "#7FE0D4"
 selected-border-alpha   = 1.0
-unselected-border       = "#DCE7E6"
-unselected-border-alpha = 0.28
+unselected-border       = "#F4F4F4"
+unselected-border-alpha = 0.2

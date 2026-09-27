@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 684 684">
+  <title>OmO cat standing ear glow mask: white alpha, tinted by the shell accent color at runtime</title>
+  <desc>Derived from the oh-my-openagent OmO icon (https://github.com/code-yeongyu/oh-my-openagent, .github/assets/omo-icon-light.svg) via art/omo-cat-moon.svg; retains the upstream Sustainable Use License 1.0 (see repository LICENSE). Not covered by the plugin code's MIT grant.</desc>
+  <defs>
+  <linearGradient id="left" x1="232" y1="220" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="1"/>
+  <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="right" x1="800" y1="222" x2="700" y2="400" gradientUnits="userSpaceOnUse">
+  <stop offset="0" stop-color="#FFFFFF" stop-opacity="1"/>
+  <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+  </linearGradient>
+  </defs>
+  <g transform="translate(346 544.5) scale(0.74 0.7) translate(-512 -796)">
+    <path fill="url(#left)" d="M231.75 219.82 C224.03 221.42 220.35 223.63 216.23 229.15 C202.18 247.85 196.83 296.38 202.55 353.75 C205.5 383.42 210.68 418.75 216.8 451 C262 400 322 330 386.68 278.15 C368.55 286.8 371.15 287.15 349.45 272.88 C290.18 233.82 250.48 215.92 231.75 219.82 Z"/>
+    <path fill="url(#right)" d="M807.2 451 C813.33 418.75 818.5 383.42 821.45 353.75 C828.23 285.75 819.53 232.22 800.08 222.27 C781.13 212.57 742.33 228.22 674.55 272.88 C652.85 287.15 655.45 286.8 637.33 278.15 C702 330 762 400 807.2 451 Z"/>
+  </g>
+</svg>

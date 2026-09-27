@@ -7,8 +7,10 @@ import json
 import os
 import re
 import stat
+import subprocess
 import time
 from contextlib import ExitStack
+from datetime import datetime, timezone
 from pathlib import Path
 
 SESSION_LIMIT = 12
@@ -22,6 +24,7 @@ LINE_BYTES = 256 * 1024
 ENTRY_LIMIT = 30000
 OUTPUT_BYTES = 128 * 1024
 SECONDS = 4
+RECENT_SECONDS = 600
 ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]{0,100}$")
 CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 STATUSES = ("completed", "pending", "in_progress", "abandoned")
@@ -200,13 +203,63 @@ def runtime_state(sid, budget):
         waiting = data["waiting"]
         return {"kind": state, "working": state == "live" and not waiting,
                 "status": "waiting" if waiting else ("working" if state == "live" else "idle"),
-                "evidence": "senpi extension and verified process"}
+                "evidence": "senpi extension and verified process", "_pid": pid}
     except FileNotFoundError:
         # The state file was verified, but its process disappeared.
         return ({"kind": "ended", "working": False, "status": "ended",
                  "evidence": "session process exited"} if "data" in locals() else unknown)
     except (OSError, ValueError, IndexError, UnicodeDecodeError, RecursionError):
         return unknown
+
+
+def recent_activity(timestamp):
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return False
+        age = (datetime.now(timezone.utc) - parsed).total_seconds()
+        return 0 <= age < RECENT_SECONDS
+    except (AttributeError, ValueError):
+        return False
+
+
+def ancestors(pid):
+    """Return bounded process ancestry, stopping at an invalid or vanished proc entry."""
+    found = set()
+    for _ in range(16):
+        if pid <= 1 or pid in found:
+            break
+        found.add(pid)
+        try:
+            fields = (Path("/proc") / str(pid) / "stat").read_text().rsplit(") ", 1)[1].split()
+            pid = int(fields[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return found
+
+
+def focus_windows(sessions):
+    live = [item for item in sessions if "_pid" in item["runtime"]]
+    if not live:
+        return
+    try:
+        result = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True,
+                                text=True, timeout=2, check=False)
+        if result.returncode != 0 or len(result.stdout) > JSON_BYTES:
+            return
+        clients = json.loads(result.stdout)
+        if not isinstance(clients, list):
+            return
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return
+    for item in live:
+        lineage = ancestors(item["runtime"]["_pid"])
+        matches = [client["address"] for client in clients if isinstance(client, dict)
+                   and type(client.get("pid")) is int and client["pid"] in lineage
+                   and isinstance(client.get("address"), str)
+                   and re.fullmatch(r"0x[0-9a-fA-F]+", client["address"])]
+        if len(matches) == 1:
+            item["focus"] = {"address": matches[0]}
 
 
 def session(path, root, agent_dir, budget):
@@ -342,6 +395,10 @@ def session(path, root, agent_dir, budget):
         todos = None
         partial = True
     sid = header["id"]
+    runtime = runtime_state(sid, budget)
+    if runtime["kind"] == "unknown" and recent_activity(activity):
+        runtime = {"kind": "unknown", "working": False, "status": "recent",
+                   "evidence": "recent activity; process unverified"}
     goal_data = read_json(path.parent / "extensions" / "goal" / (sid + ".json"), root, budget)
     goal_status = record(goal_data.get("goal")).get("status")
     goal = {"status": goal_status} if goal_status in ("active", "paused", "blocked", "complete") else None
@@ -358,7 +415,7 @@ def session(path, root, agent_dir, budget):
                "total": len(criteria), "status": text(selected.get("status"), 32)}
     return {"id": sid, "cwdLabel": text(Path(header["cwd"]).name or "/", 48),
             "title": title or "Untitled", "activityAt": activity,
-            "runtime": runtime_state(sid, budget),
+            "runtime": runtime,
             "todos": todos, "partial": partial, "ulw": ulw, "goal": goal,
             "runningDelegatedTasks": 0, "sessionPath": str(path), "cwd": header["cwd"]}
 
@@ -402,6 +459,9 @@ def list_sessions(agent_dir, task_dir):
         item = session(path, root, agent_dir, budget)
         if item:
             sessions.append(item)
+    focus_windows(sessions)
+    for item in sessions:
+        item["runtime"].pop("_pid", None)
     by_id = {item["id"]: item for item in sessions}
     try:
         with os.scandir(task_dir / "tasks") as files:

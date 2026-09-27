@@ -7,10 +7,13 @@
   "license": "Mixed: MIT code; Sustainable Use License 1.0 for OmO-derived cat assets (see LICENSE)",
   "description": "A compact OmO cat for the Omarchy bar. It runs only while a senpi session is verifiably working, glows during a live ultrawork loop, and opens a native panel of sessions with truthful todo and verified-criteria counts.",
   "kinds": [
-    "bar-widget"
+    "bar-widget",
+    "service"
   ],
+  "keepLoaded": true,
   "entryPoints": {
-    "barWidget": "Panel.qml"
+    "barWidget": "Panel.qml",
+    "service": "Service.qml"
   },
   "barWidget": {
     "displayName": "OmO",
@@ -30,7 +33,12 @@
       "pollMs": 5000,
       "pollIdleMs": 15000,
       "reduceMotion": false,
-      "showCount": true
+      "showCount": true,
+      "launcherPath": "",
+      "trackingInstalled": false,
+      "notifyEnabled": true,
+      "ambientBorder": true,
+      "ambientOverlay": false
     },
     "schema": [
       {
@@ -39,6 +47,41 @@
         "label": "senpi executable",
         "defaultValue": "senpi",
         "description": "Absolute senpi executable path for Launch when senpi is not on the desktop shell PATH."
+      },
+      {
+        "key": "launcherPath",
+        "type": "path",
+        "label": "OmO launcher",
+        "defaultValue": "",
+        "description": "Absolute path to omo (preferred) or senpi used by Open and Launch. Empty falls back to senpiPath. Set by the installer."
+      },
+      {
+        "key": "trackingInstalled",
+        "type": "boolean",
+        "label": "Live tracking registered globally",
+        "defaultValue": false,
+        "description": "Set by install-plugin.sh --track-all-sessions. When true, Open/Launch do not pass the status extension explicitly."
+      },
+      {
+        "key": "notifyEnabled",
+        "type": "boolean",
+        "label": "Session notifications",
+        "defaultValue": true,
+        "description": "Send native Omarchy cards for verified waiting, completion, and error transitions."
+      },
+      {
+        "key": "ambientBorder",
+        "type": "boolean",
+        "label": "Storm border",
+        "defaultValue": true,
+        "description": "Temporarily charge the active window border during verified ultrawork."
+      },
+      {
+        "key": "ambientOverlay",
+        "type": "boolean",
+        "label": "Storm wallpaper overlay",
+        "defaultValue": false,
+        "description": "Opt in to the animated wallpaper storm overlay."
       },
       {
         "key": "pollMs",
