@@ -8,7 +8,14 @@ agent_dir="${SENPI_CODING_AGENT_DIR:-${OMO_CODING_AGENT_DIR:-$HOME/.omo/agent}}"
 target="$agent_dir/themes/omo-nightsea.json"
 marker="$agent_dir/omo-nightsea.omo-install.json"
 # Installs made before the marker left themes/ still keep it there.
-[[ -e "$marker" ]] || marker="$agent_dir/themes/omo-nightsea.omo-install.json"
+legacy_marker="$agent_dir/themes/omo-nightsea.omo-install.json"
+if [[ ! -e "$marker" ]]; then
+  marker="$legacy_marker"
+elif [[ -f "$legacy_marker" && ! -L "$legacy_marker" ]]; then
+  cmp -s -- "$legacy_marker" "$marker" ||
+    { echo "Two different Senpi theme ownership markers exist: $marker and $legacy_marker" >&2; exit 1; }
+  rm -- "$legacy_marker"
+fi
 
 [[ -f "$target" && ! -L "$target" && -f "$marker" && ! -L "$marker" ]] ||
   { echo "No owned Senpi theme installation; nothing removed" >&2; exit 1; }

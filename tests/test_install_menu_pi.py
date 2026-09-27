@@ -243,6 +243,25 @@ class SenpiThemeInstallerTests(InstallerCase):
         self.assertEqual(self.run_script("uninstall-pi-theme.sh").returncode, 0)
         self.assertEqual(self.parsed_jsonc(self.settings)["theme"], "old-sea")
 
+    def test_duplicate_legacy_marker_is_removed_on_reinstall_and_uninstall(self):
+        # Given the same marker at both the current and the legacy path.
+        self.settings.write_text('{"theme":"old-sea"}\n')
+        self.assertEqual(self.run_script("install-pi-theme.sh").returncode, 0)
+        marker = self.agent / "omo-nightsea.omo-install.json"
+        legacy = self.target.parent / "omo-nightsea.omo-install.json"
+        legacy.write_bytes(marker.read_bytes())
+        # When the installer runs again.
+        result = self.run_script("install-pi-theme.sh")
+        # Then the legacy copy is gone.
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(legacy.exists())
+        # And when a duplicate reappears, removal also clears it.
+        legacy.write_bytes(marker.read_bytes())
+        removed = self.run_script("uninstall-pi-theme.sh")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(list(self.target.parent.iterdir()), [])
+        self.assertFalse(marker.exists())
+
     def test_uninstall_preserves_later_theme_selection(self):
         # Given an install followed by a user's new theme choice.
         self.settings.write_text('{"theme":"old-sea","keep":42}\n')

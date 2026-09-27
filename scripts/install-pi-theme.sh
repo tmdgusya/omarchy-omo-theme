@@ -13,8 +13,15 @@ target="$themes/omo-nightsea.json"
 # where Senpi reported it as an invalid theme; move such a marker once.
 marker="$agent_dir/omo-nightsea.omo-install.json"
 legacy_marker="$themes/omo-nightsea.omo-install.json"
-if [[ -f "$legacy_marker" && ! -L "$legacy_marker" && ! -e "$marker" ]]; then
-  mv -- "$legacy_marker" "$marker"
+if [[ -f "$legacy_marker" && ! -L "$legacy_marker" ]]; then
+  if [[ ! -e "$marker" ]]; then
+    mv -- "$legacy_marker" "$marker"
+  elif cmp -s -- "$legacy_marker" "$marker"; then
+    rm -- "$legacy_marker"
+  else
+    echo "Two different Senpi theme ownership markers exist: $marker and $legacy_marker" >&2
+    exit 1
+  fi
 fi
 if [[ -f "$agent_dir/settings.jsonc" ]]; then
   settings="$agent_dir/settings.jsonc"
