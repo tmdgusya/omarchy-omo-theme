@@ -225,11 +225,17 @@ installer-applied values; edited files are never deleted.
 
 ## Update and removal
 
-The Omarchy theme installer deletes a same-slug theme directory before
-recloning it. Check for local edits before using it to update; a local Git
-checkout can instead be updated with the user's chosen Git workflow. After
-the theme's files have been updated, re-run `scripts/install-plugin.sh` to
-refresh the bundled plugin. `omarchy plugin update` does not update this
+To update, pull the theme and re-run the installer so the copied plugin and
+bar widgets follow:
+
+```sh
+omarchy theme update                                      # git pull in every theme installed from a repo
+bash ~/.config/omarchy/themes/omo/scripts/install.sh      # add --position left if you use the left bar
+```
+
+Running `omarchy theme install` again also works, but it deletes the
+same-slug theme directory before recloning it, so check for local edits
+first. `omarchy plugin update` does not update this
 locally copied plugin. If its installed files were edited, the script refuses
 to replace them; save or reconcile those changes first.
 
