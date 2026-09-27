@@ -109,7 +109,7 @@ class MenuOrderingTests(InstallerCase):
     MENU_DIR = Path("/usr/share/omarchy/shell/plugins/menu")
     DEFAULTS = Path("/usr/share/omarchy/default/omarchy/omarchy-menu.jsonc")
     LAUNCH = {
-        "label": "OmO \u2014 \ud560 \uc77c\uc744 \ub9d0\ud558\uc138\uc694",
+        "label": "OmO \u2014 What would you like done?",
         "action": "omarchy-shell omoLauncher open",
     }
 
