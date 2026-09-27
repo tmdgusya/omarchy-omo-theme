@@ -220,6 +220,29 @@ class SenpiThemeInstallerTests(InstallerCase):
         self.assertEqual(self.settings.read_text(), original)
         self.assertFalse(self.target.exists())
 
+    def test_themes_directory_holds_only_the_theme(self):
+        # Given a fresh agent directory.
+        self.settings.write_text("{}\n")
+        # When the bundled theme is installed.
+        result = self.run_script("install-pi-theme.sh")
+        # Then Senpi's theme loader sees no ownership marker as a theme.
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(p.name for p in self.target.parent.iterdir()), ["omo-nightsea.json"])
+
+    def test_legacy_marker_in_themes_directory_is_migrated(self):
+        # Given an install whose marker was written by the older layout.
+        self.settings.write_text('{"theme":"old-sea"}\n')
+        self.assertEqual(self.run_script("install-pi-theme.sh").returncode, 0)
+        legacy = self.target.parent / "omo-nightsea.omo-install.json"
+        (self.agent / "omo-nightsea.omo-install.json").rename(legacy)
+        # When the installer runs again.
+        result = self.run_script("install-pi-theme.sh")
+        # Then the marker leaves themes/ and removal still restores the prior theme.
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(legacy.exists())
+        self.assertEqual(self.run_script("uninstall-pi-theme.sh").returncode, 0)
+        self.assertEqual(self.parsed_jsonc(self.settings)["theme"], "old-sea")
+
     def test_uninstall_preserves_later_theme_selection(self):
         # Given an install followed by a user's new theme choice.
         self.settings.write_text('{"theme":"old-sea","keep":42}\n')

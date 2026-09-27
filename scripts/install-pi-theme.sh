@@ -8,7 +8,14 @@ source_file="$root/pi.json"
 agent_dir="${SENPI_CODING_AGENT_DIR:-${OMO_CODING_AGENT_DIR:-$HOME/.omo/agent}}"
 themes="$agent_dir/themes"
 target="$themes/omo-nightsea.json"
-marker="$themes/omo-nightsea.omo-install.json"
+# Senpi loads every *.json under themes/ as a theme, so the ownership marker
+# lives beside it in the agent directory. Older installs kept it in themes/,
+# where Senpi reported it as an invalid theme; move such a marker once.
+marker="$agent_dir/omo-nightsea.omo-install.json"
+legacy_marker="$themes/omo-nightsea.omo-install.json"
+if [[ -f "$legacy_marker" && ! -L "$legacy_marker" && ! -e "$marker" ]]; then
+  mv -- "$legacy_marker" "$marker"
+fi
 if [[ -f "$agent_dir/settings.jsonc" ]]; then
   settings="$agent_dir/settings.jsonc"
 else
@@ -75,7 +82,7 @@ if [[ "$setting_owned" == true ]]; then
 fi
 
 temporary_theme="$(mktemp "$themes/.omo-nightsea.XXXXXXXX")"
-temporary_marker="$(mktemp "$themes/.omo-nightsea-marker.XXXXXXXX")"
+temporary_marker="$(mktemp "$agent_dir/.omo-nightsea-marker.XXXXXXXX")"
 trap 'rm -f -- "$temporary_theme" "$temporary_marker"' EXIT
 cp -- "$source_file" "$temporary_theme"
 chmod 644 "$temporary_theme"

@@ -6,7 +6,9 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 helper="$root/scripts/jsonc-edit.py"
 agent_dir="${SENPI_CODING_AGENT_DIR:-${OMO_CODING_AGENT_DIR:-$HOME/.omo/agent}}"
 target="$agent_dir/themes/omo-nightsea.json"
-marker="$agent_dir/themes/omo-nightsea.omo-install.json"
+marker="$agent_dir/omo-nightsea.omo-install.json"
+# Installs made before the marker left themes/ still keep it there.
+[[ -e "$marker" ]] || marker="$agent_dir/themes/omo-nightsea.omo-install.json"
 
 [[ -f "$target" && ! -L "$target" && -f "$marker" && ! -L "$marker" ]] ||
   { echo "No owned Senpi theme installation; nothing removed" >&2; exit 1; }
