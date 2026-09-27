@@ -1,5 +1,9 @@
 # OmO theme for Omarchy 4
 
+[![OmO Native for Omarchy showreel](https://github.com/tmdgusya/omarchy-omo-theme/releases/download/v3.0.0/omo-showreel.webp)](https://github.com/tmdgusya/omarchy-omo-theme/releases/download/v3.0.0/omo-native-showreel.mp4)
+
+▶ [Watch the 15-second showreel with sound](https://github.com/tmdgusya/omarchy-omo-theme/releases/download/v3.0.0/omo-native-showreel.mp4)
+
 ![OmO desktop](preview.png)
 
 The OmO icon becomes the desktop: a light squircle plate, an ink cat with
