@@ -25,6 +25,7 @@ else
   printf '\n==> SUPER+ALT+O shortcut\nNot installed; nothing to remove.\n'
 fi
 step "Bar preset" bash "$here/uninstall-bar-preset.sh"
+step "OmO diskkeeper timer" bash "$here/uninstall-diskkeeper.sh"
 step "Bar widget, notifications, launcher service" bash "$here/uninstall-plugin.sh"
 
 if (( ${#failed[@]} )); then

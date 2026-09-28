@@ -79,7 +79,7 @@ bash ~/.config/omarchy/themes/omo/scripts/verify-install.sh
 
 `install.sh` runs the owned installers below in order, stops at the first
 failure, and is safe to re-run. Skip parts with `--no-keybind`, `--no-menu`,
-or `--no-pi-theme`.
+`--no-pi-theme`, or `--no-diskkeeper`.
 
 | Step | Script | What it changes |
 |---|---|---|
@@ -88,6 +88,7 @@ or `--no-pi-theme`.
 | Shortcut | `scripts/install-keybind.sh` | appends one marked `SUPER + ALT + O` block to `~/.config/hypr/bindings.lua`; refuses if the key is taken |
 | Menu | `scripts/install-menu.sh` | adds "OmO — What would you like done?" as the first OmO row in the Omarchy menu, keeping your own rows |
 | Terminal palette | `scripts/install-pi-theme.sh` | selects the OmO palette for omo/senpi |
+| Disk keeper | `scripts/install-diskkeeper.sh` | configures `tools/diskkeeper` (archive disk, 10:30 systemd timer, proposal mode) |
 
 Remove everything with `bash ~/.config/omarchy/themes/omo/scripts/uninstall.sh`.
 It reverses each step; files you have not edited since come back
@@ -196,6 +197,19 @@ block that calls `omarchy-shell omoLauncher toggle`, and reloads Hyprland.
 `uninstall-keybind.sh` removes the block only while it is unedited.
 
 ## Opt-in features
+
+### The daily disk tidy (default on, opt out with `--no-diskkeeper`)
+
+OmO also ships a small `tools/diskkeeper` service: every morning at 10:30 it
+looks for cold, large files in your home (14+ days untouched), moves them to an
+archive disk you pick during install, and leaves symlinks at the original
+paths so nothing breaks. You get a cat-faced notification with the day's
+report; click it to read the details. It starts in **proposal mode** — nothing
+moves until you run `go` — and every move is sha256-verified before the
+original is touched (see `tools/diskkeeper/README.md` for the full safety
+model, `restore`, and configuration).
+
+### Storm wallpaper overlay
 
 The Storm wallpaper overlay is intentionally not enabled by any installer.
 Toggle it from the installed OmO menu or set it explicitly:

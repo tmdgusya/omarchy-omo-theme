@@ -3,16 +3,17 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh [--position top|left] [--no-keybind] [--no-menu] [--no-pi-theme]
+Usage: install.sh [--position top|left] [--no-keybind] [--no-menu] [--no-pi-theme] [--no-diskkeeper]
 
   --position top|left  Bar preset (default: top, 32px; left is 36px wide)
   --no-keybind         Do not add SUPER+ALT+O to ~/.config/hypr/bindings.lua
   --no-menu            Do not add the OmO rows to the Omarchy menu
   --no-pi-theme        Do not select the OmO palette for omo/senpi
+  --no-diskkeeper      Do not install the daily disk tidy (tools/diskkeeper)
 USAGE
 }
 
-position=top keybind=true menu=true pi_theme=true
+position=top keybind=true menu=true pi_theme=true diskkeeper=true
 while (( $# )); do
   case "$1" in
     --position) [[ $# -ge 2 ]] || { usage >&2; exit 2; }; position="$2"; shift ;;
@@ -20,6 +21,7 @@ while (( $# )); do
     --no-keybind) keybind=false ;;
     --no-menu) menu=false ;;
     --no-pi-theme) pi_theme=false ;;
+    --no-diskkeeper) diskkeeper=false ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -52,6 +54,7 @@ if [[ "$keybind" == true ]]; then
 fi
 [[ "$menu" == true ]] && step "Omarchy menu rows" bash "$here/install-menu.sh"
 [[ "$pi_theme" == true ]] && step "OmO terminal palette" bash "$here/install-pi-theme.sh"
+[[ "$diskkeeper" == true ]] && step "OmO diskkeeper (daily tidy)" bash "$here/install-diskkeeper.sh"
 
 cat <<DONE
 
